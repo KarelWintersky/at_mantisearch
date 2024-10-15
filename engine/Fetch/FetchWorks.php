@@ -1,38 +1,35 @@
 <?php
 
-namespace ATFinder\Tasks;
+namespace ATFinder\Fetch;
 
+use AJUR\FluentPDO\Exception;
 use AJUR\FluentPDO\Literal;
 use AJUR\FluentPDO\Query;
 use Arris\CLIConsole;
 use Arris\Entity\Result;
-use Arris\Helpers\CLI;
-use Arris\Util\Timer;
 use ATFinder\App;
 use ATFinder\DataFetcher;
+use ATFinder\FetchAbstract;
+use ATFinder\FetchInterface;
 use Carbon\Carbon;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\BadResponseException;
-use GuzzleHttp\Exception\ClientException;
-use GuzzleHttp\Exception\ServerException;
-use JsonException;
 use LitEmoji\LitEmoji;
 use RuntimeException;
 
-class FetchWorks
+class FetchWorks extends FetchAbstract implements FetchInterface
 {
-
-    private DataFetcher $fetcher;
-
     public function __construct()
     {
-        $this->fetcher = new DataFetcher();
+        parent::__construct();
     }
 
+    /**
+     * @throws Exception
+     */
     public function run($id = null, $chunk_size = 10, $update_index = true)
     {
         if (empty($id)) {
-            $ids = $this->fetcher->getLowestIds('index_works', 'work_id',   $chunk_size);
+            $ids = $this->getLowestIds('index_works', 'work_id',   $chunk_size);
         } else {
             $ids = [$id];
         }
@@ -71,7 +68,7 @@ class FetchWorks
             $timer['getWorkDetails'] += (microtime(true) - $start);$start = microtime(true);
 
             if ($work_result->getCode() == 404) {
-                $this->indexDeleteRecord($id);
+                $this->indexDeleteRecord($id, 'index_works', 'works');
                 $this->writeJSON($id, $work, true);
 
                 CLIConsole::say(": Work deleted or moved to drafts");
@@ -96,6 +93,7 @@ class FetchWorks
             $timer['makeSQLDataset'] += (microtime(true) - $start);$start = microtime(true);
 
             $bid = $fluent->from('works', $id)->fetchColumn();
+
             $timer['fetchID'] += (microtime(true) - $start);$start = microtime(true);
 
             CLIConsole::say(" updating DB: ", false);
@@ -111,7 +109,7 @@ class FetchWorks
             $timer['updateDB'] += (microtime(true) - $start);$start = microtime(true);
 
             if ($update_index) {
-                $this->updateIndexRecord($id);
+                $this->updateIndexRecord($id, 'index_works');
             }
 
             $timer['updateStatus']  += (microtime(true) - $start);$start = microtime(true);
@@ -254,66 +252,8 @@ class FetchWorks
         return $data;
     }
 
-    /**
-     * Write JSON to log file
-     *
-     * @param int $id
-     * @param mixed $json
-     * @param bool $is_error
-     * @return void
-     */
-    private function writeJSON(int $id, mixed $json, bool $is_error = false)
-    {
-        if (!is_string($json)) {
-            $json = json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-        }
-        $dir = App::$PROJECT_ROOT . "/json";
-
-        if (!is_dir($dir)) {
-            mkdir($dir, recursive: true);
-        }
-        $prefix = $is_error ? '_' : '';
-
-        $f = fopen("{$dir}/{$prefix}{$id}.json}", "w+");
-        fwrite($f, $json, strlen($json));
-        fclose($f);
-    }
-
-    /**
-     * Удаляет запись из индексной таблицы и таблицы works
-     *
-     * @param mixed $id
-     * @return bool
-     * @throws \AJUR\FluentPDO\Exception
-     */
-    private function indexDeleteRecord(mixed $id)
-    {
-        return
-        (new Query(App::$PDO))->delete("index_works")->where('work_id', (int)$id)->execute()
-        &&
-        (new Query(App::$PDO))->delete('works')->where('work_id', $id)->execute();
-    }
 
 
-    /**
-     * Обновляет статус записи в индексной таблице
-     *
-     * @param mixed $id
-     * @return bool|int|\PDOStatement
-     * @throws \AJUR\FluentPDO\Exception
-     */
-    private function updateIndexRecord(mixed $id)
-    {
-        return
-            (new Query(App::$PDO))
-            ->update("index_works", [
-                'latest_parse'  =>  new Literal("latest_fetch"),
-                'need_update'   =>  0
-            ])
-            ->where("work_id", (int)$id)
-            ->execute();
-        // var_dump($f->getQuery(true), $f->getParameters());
-    }
 
 
 }
