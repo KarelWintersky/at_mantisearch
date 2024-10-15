@@ -8,6 +8,7 @@ use AJUR\FluentPDO\Query;
 use Arris\CLIConsole;
 use Arris\Entity\Result;
 use ATFinder\App;
+use ATFinder\DiDomWrapper;
 use ATFinder\FetchAbstract;
 use ATFinder\FetchInterface;
 use Carbon\Carbon;
@@ -96,14 +97,14 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                     continue;
                 }
             } else {
-                $work = json_decode($work_result->response, true);
+                $work = $this->parseBook($id, $work_result);
             }
 
             $this->writeJSON($id, $work);
 
             $timer['writeJSON'] += (microtime(true) - $start);$start = microtime(true);
 
-            $sql_data = $this->makeSqlDatasetAPI($id, $work, (bool)$work_result->isAudio);
+            $sql_data = $this->makeSqlDatasetAPI($id, $work);
 
             $timer['makeSQLDataset'] += (microtime(true) - $start);$start = microtime(true);
 
@@ -217,104 +218,14 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         return $r;
     }
 
-    public function getWorkDetailsAPI($id):Result
-    {
-        // https://api.author.today/help/api/get-v1-work-id-details_orderid_orderstatus_recommendationscount
-
-        $r = new Result();
-        $r->isAudio = false;
-        $r->isHTML = false;
-        $r->isJSON = true;
-
-        try {
-            $client = new Client([
-                'base_uri'  =>  'https://api.author.today/'
-            ]);
-            $request = $client->request(
-                'GET',
-                "v1/work/{$id}/details",
-                [
-                    'debug'     =>  false,
-                    'headers'   =>  [
-                        'Authorization' =>  "Bearer guest"
-                    ]
-                ]
-            );
-            $response = $request->getBody()->getContents() ?? "{}";
-
-            $response = json_decode($response, true, flags: JSON_THROW_ON_ERROR);
-
-        } catch (RuntimeException|\Exception $e) {
-            $r->error($e->getMessage());
-            $r->setCode($e->getCode());
-
-            $response = [
-                'code'      =>  $e->getCode(),
-                'message'   =>  $e->getMessage()
-            ];
-
-            if (
-                $response['code'] == 403 &&
-                Regex::match("/VersionIsUnsupported/", $response['message'])->hasMatch()
-            ) {
-                $r->isAudio = true;
-            }
-
-        }
-
-        $r->response = $response;
-
-        return $r;
-    }
-
-    private function getWorkDetailsRAW($id, $is_audio = false):Result
-    {
-        $url = $is_audio ? "/audiobook/{$id}" : "/work/{$id}";
-        $r = new Result();
-        $r->isAudio = $is_audio;
-        $response = "";
-
-        try {
-            $client = new Client([
-                'base_uri'  =>  'https://author.today/'
-            ]);
-            $request = $client->request(
-                'GET',
-                $url,
-                [
-                    'debug'     =>  false,
-                    'headers'   =>  [
-                        'Authorization' =>  "Bearer guest"
-                    ]
-                ]
-            );
-            $response = $request->getBody()->getContents() ?? "";
-
-            $r->html = $response;
-
-
-        } catch (RuntimeException|\Exception $e) {
-            $r->error($e->getMessage());
-            $r->setCode($e->getCode());
-            $r->setData([
-                'code'      =>  $e->getCode(),
-                'message'   =>  $e->getMessage()
-            ]);
-        }
-
-        return $r;
-    }
-
-
-
     private function makeSqlDatasetAPI(int $id, array $work, bool $is_audio = false):array
     {
         $data = [
             'work_id'       =>  $id,
             'lastmod'       =>  new Literal('NOW()'),
-            'title'         =>  LitEmoji::removeEmoji($work['title'] ?? ''),
-            'annotation'    =>  LitEmoji::removeEmoji($work['annotation'] ?? ''),
-            'author_notes'  =>  LitEmoji::removeEmoji($work['authorNotes'] ?? ''),
+            'title'         =>  LitEmoji::removeEmoji(trim($work['title'] ?? '')),
+            'annotation'    =>  LitEmoji::removeEmoji(trim($work['annotation'] ?? '')),
+            'author_notes'  =>  LitEmoji::removeEmoji(trim($work['authorNotes'] ?? '')),
             'cover_url'     =>  $work['coverUrl'] ?? '',
 
             'series_works_ids'  =>  implode(',', $work['seriesWorkIds'] ?? []),
@@ -400,7 +311,65 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
     private function parseAudioBook(mixed $id, Result $work_result)
     {
-        return $work_result->response;
+        $d = new DiDomWrapper($work_result->response);
+
+        $data = [
+            'title'         =>  $d->node('.book-title > span[itemprop="name"]'),
+            'annotation'    =>  $d->node('.annotation > div.rich-content:nth-child(1)'),
+            'author_notes'  =>  $d->node('.annotation > div.rich-content:nth-child(2)'),
+            'cover_url'     =>  $d->attr('img.cover-image', 'src'),
+
+            'seriesWorkIds' =>  [],
+            'seriesWorkNumber'  =>  str_replace(
+                [' ', '#'],
+                ['', ''],
+                $d->node('.book-meta-panel > div:nth-child(3) > div:nth-child(3) > span:nth-child(3)')
+            ),
+
+            'seriesId'      =>  0,
+            'seriesOrder'   =>  0,
+            'seriesTitle'   =>  '',
+
+            'isExclusive'   =>  '',
+            'promoFragment' =>  '',
+            'isFinished'    =>  '',
+            'adultOnly'     =>  '',
+
+            'lastUpdateTime'    =>  '',
+            'lastModificationTime'  =>  '',
+            'finishTime'        =>  '',
+
+            'textLength'    =>  0,
+            'price'         =>  0,
+
+        ];
+
+        dd($data);
+
+        return $data;
+    }
+
+    private function parseBook(mixed $id, Result $work_result)
+    {
+        return json_decode($work_result->response, true);
+    }
+
+    /**
+     * @param Document $d
+     * @param $find_pattern
+     * @param $field - textContent or nodeValue
+     * @param $index
+     * @return string|null
+     * @throws \DiDom\Exceptions\InvalidSelectorException
+     */
+    private function node(Document $d, $find_pattern = '', $field = 'textContent', $index = 0)
+    {
+        return $d->find($find_pattern)[$index]->getNode()->{$field};
+    }
+
+    private function attr(Document $d, $find_pattern = '', $attr = '')
+    {
+        dd($d->find($find_pattern));
     }
 
 

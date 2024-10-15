@@ -22,7 +22,7 @@ App::$PDO = new \Arris\Database\DBWrapper([
     'slow_query_threshold'  => 1
 ]);
 
-$parser = new \ATFinder\Fetch\FetchWorks();
+$parser = new \ATFinder\Fetch\FetchWorks(false);
 $parser->run(null, 100000);
 
 
