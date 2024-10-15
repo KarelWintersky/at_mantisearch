@@ -2,20 +2,21 @@
 
 namespace ATFinder\Fetch;
 
-use ATFinder\DataFetcher;
 
-class FetchAuthors
+use ATFinder\FetchAbstract;
+use ATFinder\FetchInterface;
+
+class FetchAuthors extends FetchAbstract implements FetchInterface
 {
-    private \Arris\Database\DBWrapper $db;
-    private DataFetcher $fetcher;
-
     public function __construct()
     {
-        $this->fetcher = new DataFetcher();
+        parent::__construct();
     }
 
-    public function run()
+
+    #[\Override]
+    public function run($id = null, $chunk_size = 10, $update_index = true)
     {
+        // TODO: Implement run() method.
     }
-
 }

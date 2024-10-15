@@ -12,13 +12,15 @@ use League\Csv\Writer;
 use vipnytt\SitemapParser;
 use vipnytt\SitemapParser\Exceptions\SitemapParserException;
 
-#[AllowDynamicProperties] class IndexFetcher
+#[AllowDynamicProperties]
+class IndexFetcher extends FetchAbstract
 {
-    private DBWrapper $db;
     private CookieJar $cookieJar;
 
     public function __construct()
     {
+        parent::__construct();
+
         $this->cookieJar = CookieJar::fromArray([
             'backend_route' => 'web08'
         ], ".author.today");
@@ -36,19 +38,10 @@ use vipnytt\SitemapParser\Exceptions\SitemapParserException;
             'posts'     =>  strlen('https://author.today/post/'),
             'works'     =>  strlen('https://author.today/work/')
         ];
-
     }
 
-    /**
-     * @param DBWrapper $wrapper
-     * @return void
-     */
-    public function setPDOHandler(DBWrapper $wrapper)
-    {
-        $this->db = $wrapper;
-    }
 
-    public function loadWorkTags($logging = true)
+    public function loadWorkTags($logging = true): array
     {
         $items = [];
         $items_inner_counter = 1;
@@ -102,7 +95,7 @@ use vipnytt\SitemapParser\Exceptions\SitemapParserException;
         return $items;
     } // loadWorkTags
 
-    public function loadAuthors($logging = true)
+    public function loadAuthors($logging = true): array
     {
         $items = [];
         $items_inner_counter = 1;
@@ -156,7 +149,7 @@ use vipnytt\SitemapParser\Exceptions\SitemapParserException;
         return $items;
     }
 
-    public function loadPosts($logging = true)
+    public function loadPosts($logging = true): array
     {
         $items = [];
         $items_inner_counter = 1;
@@ -211,7 +204,7 @@ use vipnytt\SitemapParser\Exceptions\SitemapParserException;
         return $items;
     }
 
-    public function loadWorks($logging = true)
+    public function loadWorks($logging = true): array
     {
         $items = [];
         $items_inner_counter = 1;
@@ -266,29 +259,12 @@ use vipnytt\SitemapParser\Exceptions\SitemapParserException;
         return $items;
     }
 
-    public function writeCSV($target, $header, $data)
-    {
-        $csv = Writer::createFromString();
-        $csv->insertOne($header);
-        $csv->insertAll($data);
-        $f = fopen($target, 'w+');
-        fwrite($f, $csv->toString());
-        fclose($f);
-    }
-
     public function updateSQL($target, $data, $with_author = false):int
     {
-        $sql
-            = $with_author
-            ?
-            "
-INSERT INTO {$target} (id, login, latest_fetch, need_update) VALUES (:id, :login, :latest_fetch, 1) 
-ON DUPLICATE KEY UPDATE login = :login, latest_fetch = :latest_fetch, need_update = 1"
-            :
-            "
-INSERT INTO {$target} (id, latest_fetch, need_update) VALUES (:id, :latest_fetch, 1) 
-ON DUPLICATE KEY UPDATE latest_fetch = :latest_fetch, need_update = 1"
-        ;
+        $sql = "
+REPLACE INTO {$target} (work_id, login, latest_fetch, need_update) 
+VALUES (:work_id, :login, :latest_fetch, 1)        
+        ";
 
         $sth = $this->db->prepare($sql);
 
@@ -298,12 +274,10 @@ ON DUPLICATE KEY UPDATE latest_fetch = :latest_fetch, need_update = 1"
         $padded_total = str_pad($total_rows, $pad_length, ' ', STR_PAD_LEFT);
         foreach ($data as $row) {
             $dataset = [
-                'id'            =>  $row['id'],
-                'latest_fetch'  =>  $row['lastmod']
+                'work_id'       =>  $row['id'],
+                'latest_fetch'  =>  $row['lastmod'],
+                'login'         =>  $with_author ? $row['author'] : ''
             ];
-            if ($with_author) {
-                $dataset['login'] = $row['author'];
-            }
 
             $sth->execute($dataset);
             $inserted_rows++;

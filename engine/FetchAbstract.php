@@ -5,6 +5,8 @@ namespace ATFinder;
 use AJUR\FluentPDO\Exception;
 use AJUR\FluentPDO\Literal;
 use AJUR\FluentPDO\Query;
+use League\Csv\CannotInsertRecord;
+use League\Csv\Writer;
 use PDO;
 
 class FetchAbstract
@@ -13,7 +15,7 @@ class FetchAbstract
     /**
      * @var \Arris\Database\DBWrapper
      */
-    private mixed $db;
+    public mixed $db;
 
     public function __construct()
     {
@@ -60,7 +62,7 @@ class FetchAbstract
         }
         $prefix = $is_error ? '_' : '';
 
-        $f = fopen("{$dir}/{$prefix}{$id}.json}", "w+");
+        $f = fopen("{$dir}/{$prefix}{$id}.json", "w+");
         fwrite($f, $json, strlen($json));
         fclose($f);
     }
@@ -116,6 +118,22 @@ class FetchAbstract
                 ->where("work_id", (int)$id)
                 ->execute();
         // var_dump($f->getQuery(true), $f->getParameters());
+    }
+
+    /**
+     * write CSV with data and header
+     *
+     * @throws CannotInsertRecord
+     * @throws \League\Csv\Exception
+     */
+    public function writeCSV($target, $header, $data): void
+    {
+        $csv = Writer::createFromString();
+        $csv->insertOne($header);
+        $csv->insertAll($data);
+        $f = fopen($target, 'w+');
+        fwrite($f, $csv->toString());
+        fclose($f);
     }
 
 }

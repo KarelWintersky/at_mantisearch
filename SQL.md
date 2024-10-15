@@ -1,54 +1,34 @@
-```sql
-CREATE TABLE index_authors (
-	id int auto_increment NOT NULL,
-	login varchar(100) DEFAULT '' COMMENT 'author login',
-	latest_fetch datetime NULL COMMENT 'latest fetch from sitemap timestamp',
-	latest_parse datetime NULL COMMENT 'latest data update timestamp' ,
-	need_update tinyint NOT NULL DEFAULT 0 COMMENT 'need update author (parse < fetch)',
-	PRIMARY KEY (id),
-	KEY latest_fetch (latest_fetch),
-	KEY latest_parse (latest_parse)
-)
-ENGINE=InnoDB
-DEFAULT CHARSET=utf8mb4;
+# 2024-10-15
 
-CREATE TABLE index_posts (
-	id int auto_increment NOT NULL,
-	login varchar(100) DEFAULT '' COMMENT 'author login',
-	latest_fetch datetime NULL COMMENT 'latest fetch from sitemap timestamp',
-	latest_parse datetime NULL COMMENT 'latest data update timestamp', 
-	need_update tinyint NOT NULL DEFAULT 0 COMMENT 'need update post (parse < fetch)',
-	PRIMARY KEY (id),
-	KEY latest_fetch (latest_fetch),
-	KEY latest_parse (latest_parse)
-)
-ENGINE=InnoDB
-DEFAULT CHARSET=utf8mb4;
+```sql
+-- индекс произведений, строится на основе sitemap
 
 CREATE TABLE index_works (
 	id int auto_increment NOT NULL,
+	login varchar(100) default '' comment 'login, always empty for works',
 	work_id int not null DEFAULT 0 comment 'work id',
 	latest_fetch datetime NULL COMMENT 'latest fetch from sitemap timestamp',
-	latest_parse datetime NULL COMMENT 'latest data update timestamp', 
+	latest_parse datetime NULL COMMENT 'latest data update timestamp',
 	need_update tinyint NOT NULL DEFAULT 0 COMMENT 'need update work (parse < fetch)',
 	PRIMARY KEY (id),
 	KEY latest_fetch (latest_fetch),
-	KEY latest_parse (latest_parse)
+	KEY latest_parse (latest_parse),
+	KEY `idx_work_id` (`work_id`)
 )
 ENGINE=InnoDB
-DEFAULT CHARSET=utf8mb4;
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_0900_ai_ci
+;
 
+-- todo: добавить комментарий для столбца lastmod
 
-```
-
-
-```sql
+-- информация по произведениям, строится на основе индекса и API
 CREATE TABLE works (
 	id int auto_increment NOT NULL COMMENT 'id книги',
 	work_id int not null DEFAULT 0 comment 'work id',
 
-	+lastmod datetime NULL COMMENT 'NOW()',
-	+is_need_update tinyint DEFAULT 0 COMMENT 'флаг требуется обновление через АПИ',
+	lastmod datetime NULL COMMENT 'NOW()',
+	is_need_update tinyint DEFAULT 0 COMMENT 'флаг требуется обновление через АПИ',
 
 	title varchar(250) DEFAULT '' COMMENT 'название, обрезанное до 250 символов, лимит АТ 150',
 	annotation text NULL COMMENT 'аннотация HTML',
@@ -112,13 +92,19 @@ CREATE TABLE works (
 	entity_format ENUM('Any', 'EBook', 'Audiobook') DEFAULT 'Any' COMMENT 'WorkFormatEnum',
 	entity_privacy ENUM('All', 'OnlyFriends') DEFAULT 'All' COMMENT 'Приватность',
 
-	CONSTRAINT works_PK PRIMARY KEY (id)
+	CONSTRAINT works_PK PRIMARY KEY (id),
+	KEY `idx_work_id` (`work_id`),
+    KEY `idx_is_need_update` (`is_need_update`)
 )
 ENGINE=InnoDB
-DEFAULT CHARSET=utf8mb4;
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_0900_ai_ci
+;
 
-ALTER TABLE works ADD need_update tinyint DEFAULT 1 NULL COMMENT 'нужно обновление данных';
 ```
+
+# Прочие таблицы
+
 
 ```sql
 CREATE TABLE posts (
@@ -189,5 +175,39 @@ ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE authors ADD need_update tinyint DEFAULT 1 NULL COMMENT 'нужно обновление данных';
+```
+
+
+
+```sql
+CREATE TABLE index_authors (
+	id int auto_increment NOT NULL,
+	login varchar(100) DEFAULT '' COMMENT 'author login',
+	latest_fetch datetime NULL COMMENT 'latest fetch from sitemap timestamp',
+	latest_parse datetime NULL COMMENT 'latest data update timestamp' ,
+	need_update tinyint NOT NULL DEFAULT 0 COMMENT 'need update author (parse < fetch)',
+	PRIMARY KEY (id),
+	KEY latest_fetch (latest_fetch),
+	KEY latest_parse (latest_parse)
+)
+ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE index_posts (
+	id int auto_increment NOT NULL,
+	login varchar(100) DEFAULT '' COMMENT 'author login',
+	latest_fetch datetime NULL COMMENT 'latest fetch from sitemap timestamp',
+	latest_parse datetime NULL COMMENT 'latest data update timestamp',
+	need_update tinyint NOT NULL DEFAULT 0 COMMENT 'need update post (parse < fetch)',
+	PRIMARY KEY (id),
+	KEY latest_fetch (latest_fetch),
+	KEY latest_parse (latest_parse)
+)
+ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4;
+
+
+
+
 ```
 
