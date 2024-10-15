@@ -100,6 +100,11 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                 $work = $this->parseBook($id, $work_result);
             }
 
+            if (empty($work)) {
+                CLIConsole::say(" other error");
+                continue;
+            }
+
             $this->writeJSON($id, $work);
 
             $timer['writeJSON'] += (microtime(true) - $start);$start = microtime(true);
@@ -213,7 +218,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         } catch (RuntimeException|\Exception $e) {
             $r->error($e->getMessage());
             $r->setCode($e->getCode());
-        }
+    }
 
         return $r;
     }
@@ -309,7 +314,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             ->execute();
     }
 
-    private function parseAudioBook(mixed $id, Result $work_result)
+    public function parseAudioBook(mixed $id, Result $work_result)
     {
         $d = new DiDomWrapper($work_result->response);
 
@@ -354,23 +359,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         return json_decode($work_result->response, true);
     }
 
-    /**
-     * @param Document $d
-     * @param $find_pattern
-     * @param $field - textContent or nodeValue
-     * @param $index
-     * @return string|null
-     * @throws \DiDom\Exceptions\InvalidSelectorException
-     */
-    private function node(Document $d, $find_pattern = '', $field = 'textContent', $index = 0)
-    {
-        return $d->find($find_pattern)[$index]->getNode()->{$field};
-    }
 
-    private function attr(Document $d, $find_pattern = '', $attr = '')
-    {
-        dd($d->find($find_pattern));
-    }
 
 
 }
