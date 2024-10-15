@@ -8,19 +8,23 @@ use AJUR\FluentPDO\Query;
 use Arris\CLIConsole;
 use Arris\Entity\Result;
 use ATFinder\App;
-use ATFinder\DataFetcher;
 use ATFinder\FetchAbstract;
 use ATFinder\FetchInterface;
 use Carbon\Carbon;
+use DiDom\Document;
 use GuzzleHttp\Client;
 use LitEmoji\LitEmoji;
 use RuntimeException;
+use Spatie\Regex\Regex;
 
 class FetchWorks extends FetchAbstract implements FetchInterface
 {
-    public function __construct()
+    private bool $parse_audiobooks = false;
+    public function __construct($parse_audiobooks = false)
     {
         parent::__construct();
+
+        $this->parse_audiobooks = $parse_audiobooks;
     }
 
     /**
@@ -29,7 +33,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
     public function run($id = null, $chunk_size = 10, $update_index = true)
     {
         if (empty($id)) {
-            $ids = $this->getLowestIds('index_works', 'work_id',   $chunk_size);
+            $ids = $this->getLowestIds('index_works', 'work_id',   $chunk_size, $this->parse_audiobooks);
         } else {
             $ids = [$id];
         }
@@ -62,33 +66,44 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                 false
             );
 
-            $work_result = $this->getWorkDetails($id);
-            $work = (array)$work_result->response;
+            $work_result = $this->getWork($id, $this->parse_audiobooks);
 
             $timer['getWorkDetails'] += (microtime(true) - $start);$start = microtime(true);
 
-            if ($work_result->getCode() == 404) {
-                $this->indexDeleteRecord($id, 'index_works', 'works');
-                $this->writeJSON($id, $work, true);
+            if ($work_result->is_error) {
 
-                CLIConsole::say(": Work deleted or moved to drafts");
+                $this->writeJSON($id, $work_result->response, true);
 
-                continue;
+                if ($work_result->getCode() == 404) {
+                    $this->indexDeleteRecord($id, 'index_works', 'works');
+
+                    CLIConsole::say(": Work deleted or moved to drafts");
+
+                    continue;
+                }
             }
 
-            if (!empty($work_result->getCode())) {
-                CLIConsole::say(" Other API error");
+            $work = [];
 
-                $this->writeJSON($id, $work, true);
+            if ($work_result->isAudio) {
 
-                continue;
-            };
+                if ($this->parse_audiobooks) {
+                    $work = $this->parseAudioBook($id, $work_result);
+                } else {
+                    CLIConsole::say(" Audiobook unsupported yet");
+                    $this->writeJSON($id, $work_result->response, prefix: '__');
+                    $this->markIndexAsAudiobook($id);
+                    continue;
+                }
+            } else {
+                $work = json_decode($work_result->response, true);
+            }
 
             $this->writeJSON($id, $work);
 
             $timer['writeJSON'] += (microtime(true) - $start);$start = microtime(true);
 
-            $sql_data = $this->makeSqlDataset($id, $work);
+            $sql_data = $this->makeSqlDatasetAPI($id, $work, (bool)$work_result->isAudio);
 
             $timer['makeSQLDataset'] += (microtime(true) - $start);$start = microtime(true);
 
@@ -127,15 +142,89 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                     number_format(1000 * $t / $total_rows, 3, '.', ' ')
             ));
         }
-
-
     }
 
-    public function getWorkDetails($id):Result
+    public function getWork($id, $fetch_audio = false):Result
+    {
+        $r = new Result();
+        $r->isAudio = false;
+        $r->isJSON = true;
+        $r->isHTML = false;
+        $r->response = "{}";
+
+        try {
+            $client_api = new Client([
+                'base_uri'  =>  'https://api.author.today/'
+            ]);
+            $request = $client_api->request(
+                'GET',
+                "v1/work/{$id}/details",
+                [
+                    'debug'     =>  false,
+                    'headers'   =>  [
+                        'Authorization' =>  "Bearer guest"
+                    ]
+                ]
+            );
+            $r->response = $request->getBody()->getContents() ?? "{}";
+
+            return $r;
+
+        } catch (RuntimeException|\Exception $e) {
+            $r->error($e->getMessage());
+            $r->setCode($e->getCode());
+
+            if (
+                $e->getCode() == 403 &&
+                Regex::match("/VersionIsUnsupported/", $e->getMessage())->hasMatch()
+            ) {
+                $r->success("Is Error");
+                $r->isAudio = true;
+            } elseif (Regex::match("/cURL error/", $e->getMessage())->hasMatch()) {
+                $r->setCode(35);
+                return $r;
+            } else {
+                return $r;
+            }
+        }
+
+        if ($fetch_audio === false) {
+            return $r;
+        }
+
+        try {
+            $client_raw = new Client([
+                'base_uri'  =>  'https://author.today/'
+            ]);
+            $request = $client_raw->request(
+                'GET',
+                "/audiobook/{$id}",
+                [
+                    'debug'     =>  false,
+                    'headers'   =>  [
+                        'Authorization' =>  "Bearer guest"
+                    ]
+                ]
+            );
+            $r->response = $response = $request->getBody()->getContents() ?? "{}";
+            $r->isHTML = true;
+            $r->isJSON = false;
+        } catch (RuntimeException|\Exception $e) {
+            $r->error($e->getMessage());
+            $r->setCode($e->getCode());
+        }
+
+        return $r;
+    }
+
+    public function getWorkDetailsAPI($id):Result
     {
         // https://api.author.today/help/api/get-v1-work-id-details_orderid_orderstatus_recommendationscount
 
         $r = new Result();
+        $r->isAudio = false;
+        $r->isHTML = false;
+        $r->isJSON = true;
 
         try {
             $client = new Client([
@@ -164,6 +253,13 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                 'message'   =>  $e->getMessage()
             ];
 
+            if (
+                $response['code'] == 403 &&
+                Regex::match("/VersionIsUnsupported/", $response['message'])->hasMatch()
+            ) {
+                $r->isAudio = true;
+            }
+
         }
 
         $r->response = $response;
@@ -171,7 +267,47 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         return $r;
     }
 
-    private function makeSqlDataset(int $id, array $work):array
+    private function getWorkDetailsRAW($id, $is_audio = false):Result
+    {
+        $url = $is_audio ? "/audiobook/{$id}" : "/work/{$id}";
+        $r = new Result();
+        $r->isAudio = $is_audio;
+        $response = "";
+
+        try {
+            $client = new Client([
+                'base_uri'  =>  'https://author.today/'
+            ]);
+            $request = $client->request(
+                'GET',
+                $url,
+                [
+                    'debug'     =>  false,
+                    'headers'   =>  [
+                        'Authorization' =>  "Bearer guest"
+                    ]
+                ]
+            );
+            $response = $request->getBody()->getContents() ?? "";
+
+            $r->html = $response;
+
+
+        } catch (RuntimeException|\Exception $e) {
+            $r->error($e->getMessage());
+            $r->setCode($e->getCode());
+            $r->setData([
+                'code'      =>  $e->getCode(),
+                'message'   =>  $e->getMessage()
+            ]);
+        }
+
+        return $r;
+    }
+
+
+
+    private function makeSqlDatasetAPI(int $id, array $work, bool $is_audio = false):array
     {
         $data = [
             'work_id'       =>  $id,
@@ -252,8 +388,20 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         return $data;
     }
 
+    private function markIndexAsAudiobook(mixed $id)
+    {
+        (new Query(App::$PDO))
+            ->update('index_works', [
+                'is_audio'      =>  1,
+            ])
+            ->where("work_id", (int)$id)
+            ->execute();
+    }
 
-
+    private function parseAudioBook(mixed $id, Result $work_result)
+    {
+        return $work_result->response;
+    }
 
 
 }

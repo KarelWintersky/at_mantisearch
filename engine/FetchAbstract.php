@@ -28,17 +28,22 @@ class FetchAbstract
      * @param string $table
      * @param string $field
      * @param int $chunk_size
+     * @param bool $include_audiobooks
      * @return array
      */
-    public function getLowestIds(string $table = '', string $field = "work_id", int $chunk_size = 1):array
+    public function getLowestIds(string $table = '', string $field = "work_id", int $chunk_size = 1, bool $include_audiobooks = false):array
     {
         if (empty($table)) {
             return [];
         }
-        // fetch lowest unparsed author id
-        $sth = $this->db->query(
-            "SELECT {$field} FROM {$table} WHERE latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
-        );
+
+        $sql
+            = $include_audiobooks
+            ? "SELECT {$field} FROM {$table} WHERE latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
+            : "SELECT {$field} FROM {$table} WHERE is_audio = 0 AND latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
+        ;
+
+        $sth = $this->db->query($sql);
         return $sth->fetchAll(PDO::FETCH_COLUMN, 0) ?? [];
     }
 
@@ -50,7 +55,7 @@ class FetchAbstract
      * @param bool $is_error
      * @return void
      */
-    public function writeJSON(int $id, mixed $json, bool $is_error = false): void
+    public function writeJSON(int $id, mixed $json, bool $is_error = false, string $prefix = ''): void
     {
         if (!is_string($json)) {
             $json = json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -60,9 +65,10 @@ class FetchAbstract
         if (!is_dir($dir)) {
             mkdir($dir, recursive: true);
         }
-        $prefix = $is_error ? '_' : '';
+        $_prefix = $is_error ? '_' : '';
+        $_prefix = !empty($prefix) ? $prefix : $_prefix;
 
-        $f = fopen("{$dir}/{$prefix}{$id}.json", "w+");
+        $f = fopen("{$dir}/{$_prefix}{$id}.json", "w+");
         fwrite($f, $json, strlen($json));
         fclose($f);
     }
