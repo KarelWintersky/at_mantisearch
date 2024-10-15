@@ -1,0 +1,51 @@
+        $data = [
+
+
+            'price'             =>  $work['price'] ?? 0,
+
+            'work_form'         =>  $work['workForm'] ?? 'Any',
+            'work_status'       =>  $work['status'] ?? 'Free',
+
+            'authorId'          =>  LitEmoji::removeEmoji($work['authorId'] ?? $id),
+            'authorFIO'         =>  LitEmoji::removeEmoji($work['authorFIO'] ?? ''),
+            'authorUserName'    =>  LitEmoji::removeEmoji($work['authorUserName'] ?? $id),
+
+            'coAuthorId'        =>  LitEmoji::removeEmoji($work['coAuthorId'] ?? 0),
+            'coAuthorFIO'       =>  LitEmoji::removeEmoji($work['coAuthorFIO'] ?? ''),
+            'coAuthorUserName'  =>  LitEmoji::removeEmoji($work['coAuthorUserName'] ?? ''),
+
+            'secondCoAuthorId'  =>  LitEmoji::removeEmoji($work['secondCoAuthorId'] ?? 0),
+            'secondCoAuthorFIO' =>  LitEmoji::removeEmoji($work['secondCoAuthorFIO'] ?? ''),
+            'secondCoAuthorUserName'    =>  LitEmoji::removeEmoji($work['secondCoAuthorUserName'] ?? ''),
+
+            'count_like'        =>  $work['likeCount'] ?? 0,
+            'count_comments'    =>  $work['commentCount'] ?? 0,
+            'count_rewards'     =>  $work['rewardCount'] ?? 0,
+            'count_chapters'        =>  count($work['chapters'] ?? [1]),
+            'count_chapters_free'   =>  $work['freeChapterCount'] ?? 1,
+            'count_review'      =>  $work['reviewCount'] ?? 0,
+
+            'genre_main'    =>  $work['genreId'] ?? 0,
+            'genre_2nd'     =>  $work['firstSubGenreId'] ?? 0,
+            'genre_3rd'     =>  $work['secondSubGenreId'] ?? 0,
+            'genres'        =>  (function($work){
+                $genres = [];
+                if (array_key_exists('genreId', $work) && !is_null($work['genreId'])) {
+                    $genres[] = $work['genreId'];
+                }
+                if (array_key_exists('firstSubGenreId', $work) && !is_null($work['firstSubGenreId'])) {
+                    $genres[] = $work['firstSubGenreId'];
+                }
+                if (array_key_exists('secondSubGenreId', $work) && !is_null($work['secondSubGenreId'])) {
+                    $genres[] = $work['secondSubGenreId'];
+                }
+                return implode(',', $genres);
+            })($work),
+
+            'tags'          =>  '',
+            'tags_text'     =>  LitEmoji::removeEmoji(implode(',', $work['tags'] ?? [])),
+
+            'entity_state'      =>  $work['state'] ?? 'Default',
+            'entity_format'     =>  $work['format'] ?? 'Any',
+            'entity_privacy'    =>  $work['privacyDisplay'] ?? 'All'
+        ];
