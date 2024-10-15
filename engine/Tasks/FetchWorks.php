@@ -72,7 +72,7 @@ class FetchWorks
 
             if ($work_result->getCode() == 404) {
                 $this->indexDeleteRecord($id);
-                $this->writeJSON($id, $work);
+                $this->writeJSON($id, $work, true);
 
                 CLIConsole::say(": Work deleted or moved to drafts");
 
@@ -82,7 +82,7 @@ class FetchWorks
             if (!empty($work_result->getCode())) {
                 CLIConsole::say(" Other API error");
 
-                $this->writeJSON($id, $work);
+                $this->writeJSON($id, $work, true);
 
                 continue;
             };
@@ -257,10 +257,12 @@ class FetchWorks
     /**
      * Write JSON to log file
      *
+     * @param int $id
      * @param mixed $json
+     * @param bool $is_error
      * @return void
      */
-    private function writeJSON(int $id, mixed $json)
+    private function writeJSON(int $id, mixed $json, bool $is_error = false)
     {
         if (!is_string($json)) {
             $json = json_encode($json, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -270,8 +272,9 @@ class FetchWorks
         if (!is_dir($dir)) {
             mkdir($dir, recursive: true);
         }
+        $prefix = $is_error ? '_' : '';
 
-        $f = fopen("{$dir}/{$id}.json", "w+");
+        $f = fopen("{$dir}/{$prefix}{$id}.json}", "w+");
         fwrite($f, $json, strlen($json));
         fclose($f);
     }
