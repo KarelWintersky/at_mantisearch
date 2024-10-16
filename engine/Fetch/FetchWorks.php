@@ -69,7 +69,8 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             $work_result = $this->getWork($id, $this->parse_audiobooks);
 
-            $timer['getWorkDetails'] += (microtime(true) - $start);$start = microtime(true);
+            $timer_getWorkDetails = (microtime(true) - $start);
+            $timer['getWorkDetails'] += $timer_getWorkDetails;$start = microtime(true);
 
             if ($work_result->is_error) {
 
@@ -135,9 +136,11 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             $timer['updateStatus']  += (microtime(true) - $start);$start = microtime(true);
 
-            $time_taken = number_format(1000 * (microtime(true) - $start_task), 3, '.', ' ');
+            //$time_taken = number_format(1000 * (microtime(true) - $start_task), 3, '.', ' ');
+            $time_taken = number_format(1000*$timer_getWorkDetails, 3, '.', '');
 
-            CLIConsole::say(" Ok (time taken: {$time_taken}ms)");
+            // CLIConsole::say(" Ok (time taken: {$time_taken}ms)");
+            CLIConsole::say(" Ok (API response delay: {$time_taken} ms)");
         }
 
         foreach ($timer as $i => $t) {

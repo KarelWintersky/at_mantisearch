@@ -47,4 +47,9 @@ class DiDomWrapper
         );
     }
 
+    public function find($pattern)
+    {
+        return $this->document->find($pattern);
+    }
+
 }

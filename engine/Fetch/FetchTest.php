@@ -17,8 +17,6 @@ class FetchTest extends FetchAbstract
 
     public function loadPage($id)
     {
-        $r = new Result();
-
         $client_raw = new Client([
             'base_uri'  =>  'https://author.today/'
         ]);
@@ -32,22 +30,19 @@ class FetchTest extends FetchAbstract
                 ]
             ]
         );
-        $response = $request->getBody()->getContents() ?? "";
-        $r->setMessage($response);
-
-        return $r;
+        return $request->getBody()->getContents() ?? "";
     }
 
     public function save($id, $content)
     {
         $f = fopen("{$id}.txt", "w+");
-        fwrite($f, $content->getMessage(), strlen($content->getMessage()));
+        fwrite($f, $content, strlen($content));
         fclose($f);
     }
 
     public function load($id)
     {
-        $f = fopen("{$id}.txt", "w+");
+        $f = fopen("{$id}.txt", "r+");
         $content = fread($f, 10_000_000);
         fclose($f);
         return $content;
@@ -62,13 +57,21 @@ class FetchTest extends FetchAbstract
             'annotation'    =>  $d->node('.annotation > div.rich-content:nth-child(1)'),
             'author_notes'  =>  $d->node('.annotation > div.rich-content:nth-child(2)'),
             'cover_url'     =>  $d->attr('img.cover-image', 'src'),
+        ];
 
-            'seriesWorkIds' =>  [],
-            'seriesWorkNumber'  =>  str_replace(
-                [' ', '#'],
-                ['', ''],
-                $d->node('.book-meta-panel > div:nth-child(3) > div:nth-child(3) > span:nth-child(3)')
-            ),
+        if ($d->find('.book-meta-panel > div:nth-child(3) > div:nth-child(3) > span:nth-child(3)')) {
+            $data += [
+                'seriesWorkIds' =>  [],
+                'seriesWorkNumber'  =>  str_replace(
+                    [' ', '#'],
+                    ['', ''],
+                    $d->node('.book-meta-panel > div:nth-child(3) > div:nth-child(3) > span:nth-child(3)')
+                ),
+            ];
+        }
+
+        $data += [
+
 
             'seriesId'      =>  0,
             'seriesOrder'   =>  0,
@@ -85,6 +88,39 @@ class FetchTest extends FetchAbstract
 
             'textLength'    =>  0,
             'price'         =>  0,
+
+            'workForm'      =>  '',
+            'status'        =>  'Free',
+
+            'authorId'          =>  '',
+            'authorFIO'         =>  '',
+            'authorUserName'    =>  '',
+
+            'coAuthorId'        =>  '',
+            'coAuthorFIO'       =>  '',
+            'coAuthorUserName'  =>  '',
+
+            'secondCoAuthorId'  =>  '',
+            'secondCoAuthorFIO' =>  '',
+            'secondCoAuthorUserName'    =>  '',
+            
+            'likeCount'         =>  0,
+            'commentCount'      =>  0,
+            'rewardCount'       =>  0,
+            'chapters'  =>  [],
+            'freeChapterCount'  =>  0,
+            'reviewCount'       =>  0,
+
+            'genreId'   =>  0,
+            'firstSubGenreId'   =>  0,
+            'secondSubGenreId'      =>  0,
+
+            'tags'  =>  '',
+
+            'state'     =>  '',
+            'format'    =>  '',
+            'privacyDisplay'    =>  ''
+
 
         ];
 

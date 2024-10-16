@@ -21,9 +21,9 @@ App::$PDO = new \Arris\Database\DBWrapper([
 $p = new \ATFinder\Fetch\FetchTest();
 $id = 256669;
 
-/*;
-$content = $p->loadPage($id);
-$p->save($id, $content->getMessage());*/
+// $content = $p->loadPage($id);
+// $p->save($id, $content);
+
 $content = $p->load($id);
 $p->parse($content);
 
