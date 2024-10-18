@@ -7,6 +7,7 @@ use Arris\CLIConsole;
 use Arris\Database\DBWrapper;
 use Arris\Helpers\CLI;
 use Cake\Chronos\Chronos;
+use DateTimeInterface;
 use GuzzleHttp\Cookie\CookieJar;
 use League\Csv\Writer;
 use vipnytt\SitemapParser;
@@ -232,10 +233,12 @@ class IndexFetcher extends FetchAbstract
                 foreach ($parser->getURLs() as $record) {
                     $id = substr($record['loc'], $this->offsets['works']);
 
+                    $lm = strtotime($record['lastmod']);
+                    $valid_lm = ($lm >= 1) && ($lm <= 2147483647);
+
                     $items[ $id ] = [
                         'id'        =>  $id,
-                        'lastmod'   =>  $record['lastmod'],
-                        'lastmod_ts'=>  (new Chronos($record['lastmod']))->timestamp
+                        'lastmod'   =>  $valid_lm ? $record['lastmod'] : 0,
                     ];
 
                     $items_inner_counter++;
@@ -261,12 +264,18 @@ class IndexFetcher extends FetchAbstract
 
     public function updateSQL($target, $data, $with_author = false):int
     {
+        $sth_check = $this->db->prepare("
+        SELECT id FROM {$target} WHERE work_id = :work_id
+        ");
+
         $sql = "
 REPLACE INTO {$target} (work_id, login, latest_fetch, need_update) 
 VALUES (:work_id, :login, :latest_fetch, 1)        
         ";
 
         $sth = $this->db->prepare($sql);
+
+
 
         $inserted_rows = 0;
         $total_rows = count($data);
@@ -275,7 +284,7 @@ VALUES (:work_id, :login, :latest_fetch, 1)
         foreach ($data as $row) {
             $dataset = [
                 'work_id'       =>  $row['id'],
-                'latest_fetch'  =>  $row['lastmod'],
+                'latest_fetch'  =>  ($row['lastmod'] == 0 ? date(DateTimeInterface::ATOM) : $row['lastmod']),
                 'login'         =>  $with_author ? $row['author'] : ''
             ];
 

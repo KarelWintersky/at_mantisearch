@@ -10,24 +10,24 @@ CREATE TABLE index_works (
 	latest_fetch datetime NULL COMMENT 'latest fetch from sitemap timestamp',
 	latest_parse datetime NULL COMMENT 'latest data update timestamp',
 	need_update tinyint NOT NULL DEFAULT 0 COMMENT 'need update work (parse < fetch)',
+    is_audio tinyint NOT NULL DEFAULT 0 COMMENT 'is it audiobook?',
 	PRIMARY KEY (id),
 	KEY latest_fetch (latest_fetch),
 	KEY latest_parse (latest_parse),
-	KEY `idx_work_id` (`work_id`)
+	KEY work_id (work_id),
+    KEY is_audio (is_audio)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
 COLLATE=utf8mb4_0900_ai_ci
 ;
 
--- todo: добавить комментарий для столбца lastmod
-
 -- информация по произведениям, строится на основе индекса и API
 CREATE TABLE works (
 	id int auto_increment NOT NULL COMMENT 'id книги',
 	work_id int not null DEFAULT 0 comment 'work id',
 
-	lastmod datetime NULL COMMENT 'NOW()',
+	lastmod datetime NULL COMMENT 'актуальная дата модификации записи, NOW()',
 	is_need_update tinyint DEFAULT 0 COMMENT 'флаг требуется обновление через АПИ',
 
 	title varchar(250) DEFAULT '' COMMENT 'название, обрезанное до 250 символов, лимит АТ 150',
@@ -35,13 +35,14 @@ CREATE TABLE works (
 	author_notes text NULL COMMENT 'примечания автора HTML',
 	cover_url varchar(250) DEFAULT '' COMMENT 'ссылка на обложку',
 
-	series_works_ids varchar(250) DEFAULT '' COMMENT 'остальные книги цикла, строка IDs через запятую',
+    series_works_ids TEXT COMMENT 'остальные книги цикла, строка IDs через запятую',
 	series_works_this int DEFAULT 1 COMMENT 'номер книги в цикле',
 
 	series_id int NULL COMMENT 'id цикла',
 	series_order int DEFAULT 0 COMMENT 'порядок в цикле',
 	series_title varchar(150) DEFAULT '' COMMENT 'название цикла',
 
+	is_audio tinyint DEFAULT 0 COMMENT 'это аудиокнига',
 	is_exclusive tinyint DEFAULT 0 COMMENT 'флаг эксклюзив',
 	is_promofragment tinyint DEFAULT 0 COMMENT 'флаг промо-фрагмент',
 	is_finished tinyint DEFAULT 0 COMMENT 'флаг книга завершена',
@@ -61,9 +62,9 @@ CREATE TABLE works (
 
 	work_status enum('Free', 'Subscription', 'Sales', 'Suspended') NOT NULL DEFAULT 'Free' COMMENT 'статус книги',
 
-    authorId int NULL COMMENT 'ID автора',
-    authorFIO varchar(100) NULL COMMENT 'ФИО автора',
-    authorUserName varchar(100) NULL COMMENT 'логин автора',
+        authorId int NULL COMMENT 'ID автора',
+        authorFIO varchar(100) NULL COMMENT 'ФИО автора',
+        authorUserName varchar(100) NULL COMMENT 'логин автора',
 
    	coAuthorId int NULL COMMENT 'ID соавтора №1',
 	coAuthorFIO varchar(100) NULL COMMENT 'ФИО соавтора №1',
@@ -94,7 +95,8 @@ CREATE TABLE works (
 
 	CONSTRAINT works_PK PRIMARY KEY (id),
 	KEY `idx_work_id` (`work_id`),
-    KEY `idx_is_need_update` (`is_need_update`)
+	KEY `idx_is_audio` (`is_audio`),
+	KEY `idx_is_need_update` (`is_need_update`)
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4

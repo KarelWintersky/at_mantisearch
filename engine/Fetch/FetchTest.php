@@ -35,14 +35,14 @@ class FetchTest extends FetchAbstract
 
     public function save($id, $content)
     {
-        $f = fopen("{$id}.txt", "w+");
+        $f = fopen("{$id}.html", "w+");
         fwrite($f, $content, strlen($content));
         fclose($f);
     }
 
     public function load($id)
     {
-        $f = fopen("{$id}.txt", "r+");
+        $f = fopen("{$id}.html", "r+");
         $content = fread($f, 10_000_000);
         fclose($f);
         return $content;
@@ -53,9 +53,9 @@ class FetchTest extends FetchAbstract
         $d = new DiDomWrapper($content);
 
         $data = [
-            'title'         =>  $d->node('.book-title > span[itemprop="name"]'),
-            'annotation'    =>  $d->node('.annotation > div.rich-content:nth-child(1)'),
-            'author_notes'  =>  $d->node('.annotation > div.rich-content:nth-child(2)'),
+            'title'         =>  trim($d->node('.book-title > span[itemprop="name"]')),
+            'annotation'    =>  trim($d->node('.annotation > div.rich-content:nth-child(1)')),
+            'author_notes'  =>  trim($d->node('.annotation > div.rich-content:nth-child(2)')),
             'cover_url'     =>  $d->attr('img.cover-image', 'src'),
         ];
 

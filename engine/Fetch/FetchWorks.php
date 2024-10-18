@@ -231,9 +231,9 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         $data = [
             'work_id'       =>  $id,
             'lastmod'       =>  new Literal('NOW()'),
-            'title'         =>  LitEmoji::removeEmoji(trim($work['title'] ?? '')),
-            'annotation'    =>  LitEmoji::removeEmoji(trim($work['annotation'] ?? '')),
-            'author_notes'  =>  LitEmoji::removeEmoji(trim($work['authorNotes'] ?? '')),
+            'title'         =>  $work['title'] ?? '',
+            'annotation'    =>  $work['annotation'] ?? '',
+            'author_notes'  =>  $work['authorNotes'] ?? '',
             'cover_url'     =>  $work['coverUrl'] ?? '',
 
             'series_works_ids'  =>  implode(',', $work['seriesWorkIds'] ?? []),
@@ -260,17 +260,17 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             'work_form'         =>  $work['workForm'] ?? 'Any',
             'work_status'       =>  $work['status'] ?? 'Free',
 
-            'authorId'          =>  LitEmoji::removeEmoji($work['authorId'] ?? $id),
-            'authorFIO'         =>  LitEmoji::removeEmoji($work['authorFIO'] ?? ''),
-            'authorUserName'    =>  LitEmoji::removeEmoji($work['authorUserName'] ?? $id),
+            'authorId'          =>  $work['authorId'] ?? $id,
+            'authorFIO'         =>  $work['authorFIO'] ?? '',
+            'authorUserName'    =>  $work['authorUserName'] ?? $id,
 
-            'coAuthorId'        =>  LitEmoji::removeEmoji($work['coAuthorId'] ?? 0),
-            'coAuthorFIO'       =>  LitEmoji::removeEmoji($work['coAuthorFIO'] ?? ''),
-            'coAuthorUserName'  =>  LitEmoji::removeEmoji($work['coAuthorUserName'] ?? ''),
+            'coAuthorId'        =>  $work['coAuthorId'] ?? 0,
+            'coAuthorFIO'       =>  $work['coAuthorFIO'] ?? '',
+            'coAuthorUserName'  =>  $work['coAuthorUserName'] ?? '',
 
-            'secondCoAuthorId'  =>  LitEmoji::removeEmoji($work['secondCoAuthorId'] ?? 0),
-            'secondCoAuthorFIO' =>  LitEmoji::removeEmoji($work['secondCoAuthorFIO'] ?? ''),
-            'secondCoAuthorUserName'    =>  LitEmoji::removeEmoji($work['secondCoAuthorUserName'] ?? ''),
+            'secondCoAuthorId'  =>  $work['secondCoAuthorId'] ?? 0,
+            'secondCoAuthorFIO' =>  $work['secondCoAuthorFIO'] ?? '',
+            'secondCoAuthorUserName'    =>  $work['secondCoAuthorUserName'] ?? '',
 
             'count_like'        =>  $work['likeCount'] ?? 0,
             'count_comments'    =>  $work['commentCount'] ?? 0,
@@ -303,6 +303,25 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             'entity_format'     =>  $work['format'] ?? 'Any',
             'entity_privacy'    =>  $work['privacyDisplay'] ?? 'All'
         ];
+
+        // remove emoji
+        // https://packagist.org/packages/wikimedia/utfnormal (to NFKC - выяснено экспериментально)
+        // https://habr.com/ru/articles/45489/
+        // или
+        // https://www.php.net/manual/en/class.normalizer.php
+
+        foreach (['title', 'annotation', 'author_notes', 'authorFIO', 'coAuthorFIO', 'secondCoAuthorFIO'] as $key) {
+            $data[$key] = LitEmoji::removeEmoji(
+                \UtfNormal\Validator::toNFKC(
+                    trim(
+                        $data[$key]
+                    )
+                )
+            );
+        }
+
+        // https://dencode.com/string/unicode-normalization
+
 
         return $data;
     }
