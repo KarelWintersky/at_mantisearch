@@ -21,6 +21,11 @@ use Spatie\Regex\Regex;
 
 class FetchWorks extends FetchAbstract implements FetchInterface
 {
+    // "битые" работы, результат парсинга которых не помещается в utf8mb4
+    public array $BAD_WORKS_IDS = [
+        // 79508, 79777, 80125, 81575, 109778
+    ];
+
     private bool $parse_audiobooks = false;
     public function __construct($parse_audiobooks = false)
     {
@@ -42,6 +47,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
         $fluent = new Query(App::$PDO);
 
+        $current_row = 1;
         $total_rows = count($ids);
         $pad_length = strlen((string)$total_rows) + 2;
         $padded_total = str_pad($total_rows, $pad_length, ' ', STR_PAD_LEFT);
@@ -55,41 +61,39 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             'updateStatus'      =>  0
         ];
 
-        foreach ($ids as $n => $id) {
+        foreach ($ids as $work_id) {
             $start = $start_task = microtime(true);
 
             CLIConsole::say(
                 sprintf(
                     "[ %s / %s ] Work %s ",
-                    str_pad($n, $pad_length, ' ', STR_PAD_LEFT),
+                    str_pad($current_row, $pad_length, ' ', STR_PAD_LEFT),
                     $padded_total,
-                    $id
+                    $work_id
                 ),
                 false
             );
 
-            if (in_array($id, [
-                79508, 79777, 80125, 81575, 109778
-            ])) {
+            if (in_array($work_id, $this->BAD_WORKS_IDS)) {
                 CLIConsole::say("... is skipped by internal rule");
-                $this->updateIndexRecord($id, 'works');
+                $this->updateIndexRecord($work_id, 'works');
                 continue;
             }
 
             CLIConsole::say(" ..loading remote data: ", false);
 
-            $work_result = $this->getWork($id, $this->parse_audiobooks);
+            $work_result = $this->getWork($work_id, $this->parse_audiobooks);
 
             $timer_getWorkDetails = (microtime(true) - $start);
             $timer['getWorkDetails'] += $timer_getWorkDetails;$start = microtime(true);
 
             if ($work_result->is_error) {
 
-                $this->writeJSON($id, $work_result->response, true);
+                $this->writeJSON($work_id, $work_result->response, true);
 
                 if ($work_result->getCode() == 404) {
                     // $this->indexDeleteRecord($id, 'works');
-                    $this->markForDelete($id, 'works');
+                    $this->markForDelete($work_id, 'works');
                     CLIConsole::say("Work deleted or moved to drafts");
                     continue;
                 }
@@ -100,15 +104,15 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             if ($work_result->isAudio) {
 
                 if ($this->parse_audiobooks) {
-                    $work = $this->parseAudioBook($id, $work_result);
+                    $work = $this->parseAudioBook($work_id, $work_result);
                 } else {
                     CLIConsole::say(" Audiobook unsupported yet");
-                    $this->writeJSON($id, $work_result->response, prefix: '__');
-                    $this->markWorkAsAudiobook($id);
+                    $this->writeJSON($work_id, $work_result->response, prefix: '__');
+                    $this->markWorkAsAudiobook($work_id);
                     continue;
                 }
             } else {
-                $work = $this->parseBook($id, $work_result);
+                $work = $this->parseBook($work_id, $work_result);
             }
 
             if (empty($work)) {
@@ -116,11 +120,11 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                 continue;
             }
 
-            $this->writeJSON($id, $work);
+            $this->writeJSON($work_id, $work);
 
             $timer['writeJSON'] += (microtime(true) - $start);$start = microtime(true);
 
-            $sql_data = $this->makeSqlDataset($id, $work);
+            $sql_data = $this->makeSqlDataset($work_id, $work);
 
             if (empty($sql_data)) {
                 CLIConsole::say(" Skipped due incorrect SQL Data");
@@ -128,24 +132,35 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             $timer['makeSQLDataset'] += (microtime(true) - $start);$start = microtime(true);
 
-            $bid = $fluent->from('works', $id)->fetchColumn();
-
+            /*
+            $bid = $fluent->from('works')->where("work_id", $work_id)->fetchColumn();
             $timer['fetchID'] += (microtime(true) - $start);$start = microtime(true);
-
-            CLIConsole::say(" updating DB: ", false);
 
             if (empty($bid)) {
                 $fluent->insertInto("works")->values($sql_data)->execute();
                 CLIConsole::say("Inserted", false);
             } else {
-                $fluent->update('works', $sql_data, $id)->execute();
+                $fluent->update('works', $sql_data, $work_id)->execute();
                 CLIConsole::say("Updated", false);
+            }*/
+
+            try {
+                $fluent->update('works', $sql_data)->where("work_id = {$work_id}")->execute();
+
+                CLIConsole::say("Database updated. ", false);
+
+                $timer['updateDB'] += (microtime(true) - $start);$start = microtime(true);
+
+            } catch (\Exception $e) {
+                if ($e->getCode() == 22007) {
+                    // SQLSTATE[22007]: Invalid datetime format: 1366 Incorrect string value
+                    $this->markBrokenWork($work_id, 'works');
+                    CLIConsole::say("Work is broken. ", false);
+                }
             }
 
-            $timer['updateDB'] += (microtime(true) - $start);$start = microtime(true);
-
             if ($update_index) {
-                $this->updateIndexRecord($id, 'works');
+                $this->updateIndexRecord($work_id, 'works');
             }
 
             $timer['updateStatus']  += (microtime(true) - $start);$start = microtime(true);
@@ -154,7 +169,9 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             $time_taken = number_format(1000*$timer_getWorkDetails, 3, '.', '');
 
             // CLIConsole::say(" Ok (time taken: {$time_taken}ms)");
-            CLIConsole::say(" Ok (API response delay: {$time_taken} ms)");
+            CLIConsole::say("(API response delay: {$time_taken} ms)");
+
+            $current_row++;
         }
 
         foreach ($timer as $i => $t) {
@@ -327,13 +344,13 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         // https://www.php.net/manual/en/class.normalizer.php
 
         foreach (['title', 'annotation', 'author_notes', 'authorFIO', 'coAuthorFIO', 'secondCoAuthorFIO', 'series_title', 'tags_text'] as $key) {
-            $data[$key] = LitEmoji::removeEmoji(
-                Normalizer::normalize(
-                    trim(
-                        $data[$key]
-                    , Normalizer::NFKC)
-                )
-            );
+            $string = $data[$key];
+
+            $string = trim($string);
+            $string = (new Normalizer())->normalize($string, Normalizer::NFKC);
+            $string = LitEmoji::removeEmoji($string);
+
+            $data[$key] = $string;
         }
 
         // https://dencode.com/string/unicode-normalization

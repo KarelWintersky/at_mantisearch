@@ -6,6 +6,6 @@ interface FetchInterface
 {
     public function __construct();
 
-    public function run($id = null, $chunk_size = 10, $update_index = true);
+    public function run($work_id = null, $chunk_size = 10, $update_index = true);
 
 }

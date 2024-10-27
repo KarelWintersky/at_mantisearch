@@ -39,8 +39,8 @@ class FetchAbstract
 
         $sql
             = $include_audiobooks
-            ? "SELECT {$field} FROM {$table} WHERE latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
-            : "SELECT {$field} FROM {$table} WHERE is_audio = 0 AND latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
+            ? "SELECT {$field} FROM {$table} WHERE is_broken = 0 AND latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
+            : "SELECT {$field} FROM {$table} WHERE is_broken = 0 AND is_audio = 0 AND latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
         ;
 
         $sth = $this->db->query($sql);
@@ -109,6 +109,25 @@ class FetchAbstract
 
         return (new Query(App::$PDO))->update($table, [
             'need_delete'   =>  1
+        ])->where('work_id', (int)$id)->execute();
+    }
+
+    /**
+     * Помечает работу как "сломанную"
+     *
+     * @param mixed $id
+     * @param string $table
+     * @return bool
+     * @throws Exception
+     */
+    public function markBrokenWork(mixed $id, string $table = ''):bool
+    {
+        if (empty($id) || empty($table)) {
+            return false;
+        }
+
+        return (new Query(App::$PDO))->update($table, [
+            'is_broken'     =>  1,
         ])->where('work_id', (int)$id)->execute();
     }
 

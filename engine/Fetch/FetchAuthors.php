@@ -15,7 +15,7 @@ class FetchAuthors extends FetchAbstract implements FetchInterface
 
 
     #[\Override]
-    public function run($id = null, $chunk_size = 10, $update_index = true)
+    public function run($work_id = null, $chunk_size = 10, $update_index = true)
     {
         // TODO: Implement run() method.
     }
