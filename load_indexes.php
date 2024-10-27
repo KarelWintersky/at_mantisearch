@@ -43,5 +43,4 @@ $parser = new \ATFinder\IndexFetcher();
 
 $works = $parser->loadWorks();
 $parser->writeCSV("_works.csv", ['id', 'lastmod', 'lastmod_ts'], $works);
-$parser->updateSQL("index_works", $works);
-
+$parser->updateSQLWorks($works);

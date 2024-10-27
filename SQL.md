@@ -1,6 +1,14 @@
 # 2024-10-15
 
 ```sql
+
+
+
+```
+
+
+
+```sql
 -- индекс произведений, строится на основе sitemap
 
 CREATE TABLE index_works (
@@ -8,7 +16,7 @@ CREATE TABLE index_works (
 	login varchar(100) default '' comment 'login, always empty for works',
 	work_id int not null DEFAULT 0 comment 'work id',
 	latest_fetch datetime NULL COMMENT 'latest fetch from sitemap timestamp',
-	latest_parse datetime NULL COMMENT 'latest data update timestamp',
+	latest_parse datetime NULL COMMENT 'latest data download and parse timestamp',
 	need_update tinyint NOT NULL DEFAULT 0 COMMENT 'need update work (parse < fetch)',
     is_audio tinyint NOT NULL DEFAULT 0 COMMENT 'is it audiobook?',
 	PRIMARY KEY (id),
@@ -19,7 +27,6 @@ CREATE TABLE index_works (
 )
 ENGINE=InnoDB
 DEFAULT CHARSET=utf8mb4
-COLLATE=utf8mb4_0900_ai_ci
 ;
 
 -- информация по произведениям, строится на основе индекса и API
@@ -40,7 +47,7 @@ CREATE TABLE works (
 
 	series_id int NULL COMMENT 'id цикла',
 	series_order int DEFAULT 0 COMMENT 'порядок в цикле',
-	series_title varchar(150) DEFAULT '' COMMENT 'название цикла',
+	series_title varchar(100) DEFAULT '' COMMENT 'название цикла',
 
 	is_audio tinyint DEFAULT 0 COMMENT 'это аудиокнига',
 	is_exclusive tinyint DEFAULT 0 COMMENT 'флаг эксклюзив',
@@ -62,9 +69,9 @@ CREATE TABLE works (
 
 	work_status enum('Free', 'Subscription', 'Sales', 'Suspended') NOT NULL DEFAULT 'Free' COMMENT 'статус книги',
 
-        authorId int NULL COMMENT 'ID автора',
-        authorFIO varchar(100) NULL COMMENT 'ФИО автора',
-        authorUserName varchar(100) NULL COMMENT 'логин автора',
+    authorId int NULL COMMENT 'ID автора',
+    authorFIO varchar(100) NULL COMMENT 'ФИО автора',
+    authorUserName varchar(100) NULL COMMENT 'логин автора',
 
    	coAuthorId int NULL COMMENT 'ID соавтора №1',
 	coAuthorFIO varchar(100) NULL COMMENT 'ФИО соавтора №1',

@@ -82,7 +82,7 @@ class FetchAbstract
      * @return bool
      * @throws Exception
      */
-    public function indexDeleteRecord(mixed $id, string $table_index, string $table_data):bool
+    public function indexDeleteRecord(mixed $id, string $table_index = '', string $table_data = ''):bool
     {
         if (empty($id)) {
             return false;
@@ -99,6 +99,17 @@ class FetchAbstract
         }
 
         return $success;
+    }
+
+    public function markForDelete(mixed $id, string $table = ''):bool
+    {
+        if (empty($id) || empty($table)) {
+            return false;
+        }
+
+        return (new Query(App::$PDO))->update($table, [
+            'need_delete'   =>  1
+        ])->where('work_id', (int)$id)->execute();
     }
 
     /**
@@ -125,6 +136,7 @@ class FetchAbstract
                 ->execute();
         // var_dump($f->getQuery(true), $f->getParameters());
     }
+
 
     /**
      * write CSV with data and header

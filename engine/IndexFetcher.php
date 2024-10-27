@@ -7,6 +7,7 @@ use Arris\CLIConsole;
 use Arris\Database\DBWrapper;
 use Arris\Helpers\CLI;
 use Cake\Chronos\Chronos;
+use Carbon\Carbon;
 use DateTimeInterface;
 use GuzzleHttp\Cookie\CookieJar;
 use League\Csv\Writer;
@@ -251,7 +252,7 @@ class IndexFetcher extends FetchAbstract
             }
         } catch (SitemapParserException $e) {
             if ($e->getCode() == 0) {
-                if ($logging) CLIConsole::say("not found, parsing WORKS finished");
+                if ($logging) CLIConsole::say("WORKS-{$parts_counter} not found, parsing WORKS finished");
             }
         }
 
@@ -260,6 +261,91 @@ class IndexFetcher extends FetchAbstract
         sort($items);
 
         return $items;
+    }
+
+    public function updateSQLWorks($new_works):int
+    {
+        $inserted_rows = 0;
+        $total_rows = count($new_works);
+        $pad_length = strlen((string)$total_rows) + 2;
+        $padded_total = str_pad($total_rows, $pad_length, ' ', STR_PAD_LEFT);
+
+        // получить все имеющиеся работы
+        $present_works = $this->loadPresentWorks();
+
+        // установим need_delete для всех present id которых нет в списке works
+        if (!empty($new_works)) {
+            $sql_set_need_delete = sprintf("UPDATE works SET need_delete = 1 WHERE work_id NOT IN (%s)", implode(',', array_keys($new_works)));
+            $this->db->query($sql_set_need_delete);
+        }
+
+        CLIConsole::say("Inserting...");
+
+        // проверим данные для обновления
+        foreach ($new_works as $work) {
+            $work_id = $work['id'];
+            // var_dump($work);
+
+            if (array_key_exists($work_id, $present_works)) {
+                // книга есть в БД
+                $ts_sitemap = Carbon::parse($work['lastmod']);
+                $ts_db = Carbon::parse($present_works[$work_id]['latest_fetch']);
+
+                if ($ts_sitemap > $ts_db) {
+                    // новый таймштамп книги больше имеющегося, нужно будет обновить данные
+
+                    $sth = $this->db->prepare("UPDATE works SET latest_fetch = :latest_fetch, need_update = 1 WHERE work_id = :work_id");
+                    $sth->execute([
+                        'latest_fetch'  =>  self::convertDT($work['lastmod']), //@todo: возможно, дату надо как-то обработать
+                        // date(DateTimeInterface::ATOM, $work['lastmod'])
+                        // или так:
+                        // (Carbon::parse($work['lastUpdateTime']))->toDateTimeString(),
+                        'work_id'       =>  $work_id
+                    ]);
+                }
+            } else {
+                // книги нет в БД, надо вставить первичную запись
+                $sth = $this->db->prepare("INSERT INTO works (work_id, latest_fetch, need_update) VALUES (:work_id, :latest_fetch, 1)");
+                $sth->execute([
+                    'work_id'       =>  $work_id,
+                    'latest_fetch'  =>  self::convertDT($work['lastmod'])
+                ]);
+
+
+            }
+
+            $inserted_rows++;
+            CLIConsole::say(
+                sprintf(
+                    "Inserted %s / %s \r",
+                    str_pad($inserted_rows, $pad_length, ' ', STR_PAD_LEFT),
+                    $padded_total
+                ),
+                false
+            );
+        }
+        return 1;
+    }
+
+    private static function convertDT(string $datetime):string
+    {
+        $lm = strtotime($datetime);
+        $valid_lm = ($lm >= 1) && ($lm <= 2147483647);
+
+        return $valid_lm
+            ? Carbon::parse($datetime)->toDateTimeString()
+            : Carbon::createFromTimestamp(0)->toDateTimeString();
+    }
+
+    private function loadPresentWorks():array
+    {
+        $sth = $this->db->query("SELECT work_id, latest_fetch, latest_parse FROM works ORDER BY work_id");
+        $all_works = [];
+        array_map(static function($row) use (&$all_works) {
+            $all_works[ $row['work_id'] ] = $row;
+        }, $sth->fetchAll());
+
+        return $all_works;
     }
 
     public function updateSQL($target, $data, $with_author = false):int

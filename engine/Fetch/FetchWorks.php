@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use DiDom\Document;
 use GuzzleHttp\Client;
 use LitEmoji\LitEmoji;
+use Normalizer;
 use RuntimeException;
 use Spatie\Regex\Regex;
 
@@ -34,7 +35,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
     public function run($id = null, $chunk_size = 10, $update_index = true)
     {
         if (empty($id)) {
-            $ids = $this->getLowestIds('index_works', 'work_id',   $chunk_size, $this->parse_audiobooks);
+            $ids = $this->getLowestIds('works', 'work_id',   $chunk_size, $this->parse_audiobooks);
         } else {
             $ids = [$id];
         }
@@ -59,13 +60,23 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             CLIConsole::say(
                 sprintf(
-                    "[ %s / %s ] Fetching work id %s via API ",
+                    "[ %s / %s ] Work %s ",
                     str_pad($n, $pad_length, ' ', STR_PAD_LEFT),
                     $padded_total,
                     $id
                 ),
                 false
             );
+
+            if (in_array($id, [
+                79508, 79777, 80125, 81575, 109778
+            ])) {
+                CLIConsole::say("... is skipped by internal rule");
+                $this->updateIndexRecord($id, 'works');
+                continue;
+            }
+
+            CLIConsole::say(" ..loading remote data: ", false);
 
             $work_result = $this->getWork($id, $this->parse_audiobooks);
 
@@ -77,10 +88,9 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                 $this->writeJSON($id, $work_result->response, true);
 
                 if ($work_result->getCode() == 404) {
-                    $this->indexDeleteRecord($id, 'index_works', 'works');
-
-                    CLIConsole::say(": Work deleted or moved to drafts");
-
+                    // $this->indexDeleteRecord($id, 'works');
+                    $this->markForDelete($id, 'works');
+                    CLIConsole::say("Work deleted or moved to drafts");
                     continue;
                 }
             }
@@ -94,7 +104,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                 } else {
                     CLIConsole::say(" Audiobook unsupported yet");
                     $this->writeJSON($id, $work_result->response, prefix: '__');
-                    $this->markIndexAsAudiobook($id);
+                    $this->markWorkAsAudiobook($id);
                     continue;
                 }
             } else {
@@ -110,7 +120,11 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             $timer['writeJSON'] += (microtime(true) - $start);$start = microtime(true);
 
-            $sql_data = $this->makeSqlDatasetAPI($id, $work);
+            $sql_data = $this->makeSqlDataset($id, $work);
+
+            if (empty($sql_data)) {
+                CLIConsole::say(" Skipped due incorrect SQL Data");
+            }
 
             $timer['makeSQLDataset'] += (microtime(true) - $start);$start = microtime(true);
 
@@ -131,7 +145,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             $timer['updateDB'] += (microtime(true) - $start);$start = microtime(true);
 
             if ($update_index) {
-                $this->updateIndexRecord($id, 'index_works');
+                $this->updateIndexRecord($id, 'works');
             }
 
             $timer['updateStatus']  += (microtime(true) - $start);$start = microtime(true);
@@ -226,23 +240,21 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         return $r;
     }
 
-    private function makeSqlDatasetAPI(int $id, array $work, bool $is_audio = false):array
+    private function makeSqlDataset(int $id, array $work, bool $is_audio = false):array
     {
         $data = [
-            'work_id'       =>  $id,
-            'lastmod'       =>  new Literal('NOW()'),
-            'title'         =>  $work['title'] ?? '',
-            'annotation'    =>  $work['annotation'] ?? '',
-            'author_notes'  =>  $work['authorNotes'] ?? '',
-            'cover_url'     =>  $work['coverUrl'] ?? '',
+            'work_id'           =>  $id,
+            'latest_parse'      =>  new Literal('NOW()'),
 
-            'series_works_ids'  =>  implode(',', $work['seriesWorkIds'] ?? []),
-            'series_works_this' =>  $work['seriesWorkNumber'] ?? 0,
+            'need_update'       =>  0,
 
-            'series_id'     =>  $work['seriesId'] ?? 0,
-            'series_order'  =>  $work['seriesOrder'] ?? 0,
-            'series_title'  =>  $work['seriesTitle'] ?? '',
+            'work_form'         =>  $work['workForm'] ?? 'Any',
+            'work_status'       =>  $work['status'] ?? 'Free',
+            'work_state'        =>  $work['state'] ?? 'Default',
+            'work_format'       =>  $work['format'] ?? 'Any',
+            'work_privacy'      =>  $work['privacyDisplay'] ?? 'All',
 
+            'is_audio'          =>  $is_audio ? 1 : 0,
             'is_exclusive'      =>  (int)($work['isExclusive'] ?? 'false'),
             'is_promofragment'  =>  (int)($work['promoFragment'] ?? 'false'),
             'is_finished'       =>  (int)($work['isFinished'] ?? 'false'),
@@ -250,15 +262,33 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             'is_adult'          =>  (int)($work['adultOnly'] ?? 'false'),
             'is_adult_pwp'      =>  (int)($work['isPwp'] ?? 'false'),
 
+            'count_like'        =>  $work['likeCount'] ?? 0,
+            'count_comments'    =>  $work['commentCount'] ?? 0,
+            'count_rewards'     =>  $work['rewardCount'] ?? 0,
+            'count_chapters'        =>  count($work['chapters'] ?? [1]),
+            'count_chapters_free'   =>  $work['freeChapterCount'] ?? 1,
+            'count_review'      =>  $work['reviewCount'] ?? 0,
+
             'time_last_update'          =>  (Carbon::parse($work['lastUpdateTime']))->toDateTimeString(),
             'time_last_modification'    =>  (Carbon::parse($work['lastModificationTime']))->toDateTimeString(),
             'time_finished'             =>  (Carbon::parse($work['finishTime']))->toDateTimeString(),
 
             'text_length'       =>  $work['textLength'] ?? 0,
+            'audio_length'      =>  $work['audioLength'] ?? 0,
+
             'price'             =>  $work['price'] ?? 0,
 
-            'work_form'         =>  $work['workForm'] ?? 'Any',
-            'work_status'       =>  $work['status'] ?? 'Free',
+            'title'         =>  $work['title'] ?? '',
+            'annotation'    =>  $work['annotation'] ?? '',
+            'author_notes'  =>  $work['authorNotes'] ?? '',
+            'cover_url'     =>  $work['coverUrl'] ?? '',
+
+            'series_id'     =>  $work['seriesId'] ?? 0,
+            'series_order'  =>  $work['seriesOrder'] ?? 0,
+            'series_title'  =>  $work['seriesTitle'] ?? '',
+
+            'tags'          =>  '',
+            'tags_text'     =>  implode(',', $work['tags'] ?? []),
 
             'authorId'          =>  $work['authorId'] ?? $id,
             'authorFIO'         =>  $work['authorFIO'] ?? '',
@@ -271,13 +301,6 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             'secondCoAuthorId'  =>  $work['secondCoAuthorId'] ?? 0,
             'secondCoAuthorFIO' =>  $work['secondCoAuthorFIO'] ?? '',
             'secondCoAuthorUserName'    =>  $work['secondCoAuthorUserName'] ?? '',
-
-            'count_like'        =>  $work['likeCount'] ?? 0,
-            'count_comments'    =>  $work['commentCount'] ?? 0,
-            'count_rewards'     =>  $work['rewardCount'] ?? 0,
-            'count_chapters'        =>  count($work['chapters'] ?? [1]),
-            'count_chapters_free'   =>  $work['freeChapterCount'] ?? 1,
-            'count_review'      =>  $work['reviewCount'] ?? 0,
 
             'genre_main'    =>  $work['genreId'] ?? 0,
             'genre_2nd'     =>  $work['firstSubGenreId'] ?? 0,
@@ -295,13 +318,6 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                 }
                 return implode(',', $genres);
             })($work),
-
-            'tags'          =>  '',
-            'tags_text'     =>  LitEmoji::removeEmoji(implode(',', $work['tags'] ?? [])),
-
-            'entity_state'      =>  $work['state'] ?? 'Default',
-            'entity_format'     =>  $work['format'] ?? 'Any',
-            'entity_privacy'    =>  $work['privacyDisplay'] ?? 'All'
         ];
 
         // remove emoji
@@ -310,12 +326,12 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         // или
         // https://www.php.net/manual/en/class.normalizer.php
 
-        foreach (['title', 'annotation', 'author_notes', 'authorFIO', 'coAuthorFIO', 'secondCoAuthorFIO'] as $key) {
+        foreach (['title', 'annotation', 'author_notes', 'authorFIO', 'coAuthorFIO', 'secondCoAuthorFIO', 'series_title', 'tags_text'] as $key) {
             $data[$key] = LitEmoji::removeEmoji(
-                \UtfNormal\Validator::toNFKC(
+                Normalizer::normalize(
                     trim(
                         $data[$key]
-                    )
+                    , Normalizer::NFKC)
                 )
             );
         }
@@ -326,10 +342,14 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         return $data;
     }
 
-    private function markIndexAsAudiobook(mixed $id)
+    private function markWorkAsAudiobook(mixed $id, string $table = '')
     {
+        if (empty($table)) {
+            return false;
+        }
+
         (new Query(App::$PDO))
-            ->update('index_works', [
+            ->update($table, [
                 'is_audio'      =>  1,
             ])
             ->where("work_id", (int)$id)
