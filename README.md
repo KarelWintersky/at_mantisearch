@@ -1,3 +1,9 @@
+## Жанры
+
+```bash
+curl -H "Authorization: Bearer guest" https://api.author.today/v1/work/genres > genres.json
+```
+
 ## Получить информацию о книге (точнее, о главах)
 
 `curl -H "Authorization: Bearer guest" -X GET https://api.author.today/v1/work/242498/content`

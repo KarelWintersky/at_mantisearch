@@ -7,6 +7,8 @@ use AJUR\FluentPDO\Literal;
 use AJUR\FluentPDO\Query;
 use League\Csv\CannotInsertRecord;
 use League\Csv\Writer;
+use LitEmoji\LitEmoji;
+use Normalizer;
 use PDO;
 
 class FetchAbstract
@@ -171,6 +173,20 @@ class FetchAbstract
         $f = fopen($target, 'w+');
         fwrite($f, $csv->toString());
         fclose($f);
+    }
+
+    /**
+     * Санитайз строки
+     *
+     * @param string $string
+     * @return string
+     */
+    public static function sanitize(string $string):string
+    {
+        $string = trim($string);
+        $string = (new Normalizer())->normalize($string, Normalizer::NFKC);
+        $string = LitEmoji::removeEmoji($string);
+        return $string;
     }
 
 }

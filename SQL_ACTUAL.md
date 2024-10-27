@@ -27,6 +27,8 @@
 - комменты
 - рецензии
 
+Поле "Чтец" для аудиокниги! (reciter)
+
 ```sql
 CREATE TABLE `works` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -73,6 +75,7 @@ CREATE TABLE `works` (
     `annotation` text DEFAULT NULL COMMENT 'аннотация HTML',
     `author_notes` text DEFAULT NULL COMMENT 'примечания автора HTML',
     `cover_url` varchar(250) DEFAULT '' COMMENT 'ссылка на обложку',
+
     `series_id` int(11) DEFAULT NULL COMMENT 'id цикла',
     `series_order` int(11) DEFAULT 0 COMMENT 'порядок в цикле',
     `series_title` varchar(150) DEFAULT '' COMMENT 'название цикла',

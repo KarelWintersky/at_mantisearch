@@ -47,7 +47,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
         $fluent = new Query(App::$PDO);
 
-        $current_row = 1;
+        $current_row = 0;
         $total_rows = count($ids);
         $pad_length = strlen((string)$total_rows) + 2;
         $padded_total = str_pad($total_rows, $pad_length, ' ', STR_PAD_LEFT);
@@ -62,6 +62,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         ];
 
         foreach ($ids as $work_id) {
+            $current_row++;
             $start = $start_task = microtime(true);
 
             CLIConsole::say(
@@ -170,8 +171,6 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             // CLIConsole::say(" Ok (time taken: {$time_taken}ms)");
             CLIConsole::say("(API response delay: {$time_taken} ms)");
-
-            $current_row++;
         }
 
         foreach ($timer as $i => $t) {
@@ -344,13 +343,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         // https://www.php.net/manual/en/class.normalizer.php
 
         foreach (['title', 'annotation', 'author_notes', 'authorFIO', 'coAuthorFIO', 'secondCoAuthorFIO', 'series_title', 'tags_text'] as $key) {
-            $string = $data[$key];
-
-            $string = trim($string);
-            $string = (new Normalizer())->normalize($string, Normalizer::NFKC);
-            $string = LitEmoji::removeEmoji($string);
-
-            $data[$key] = $string;
+            $data[$key] = FetchAbstract::sanitize($data[$key]);
         }
 
         // https://dencode.com/string/unicode-normalization
