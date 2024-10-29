@@ -15,7 +15,7 @@ class FetchTest extends FetchAbstract
 {
     public $mapWorkForms = [
         'Роман'                 =>  'Novel',
-        'Повесть'               =>  'Tale', // Требуется уточнение!!!
+        'Повесть'               =>  'Tale',
         'Рассказ'               =>  'Story',
         'Сборник рассказов'     =>  'StoryBook',
         'Сборник поэзии'        =>  'Poetry',
@@ -98,6 +98,13 @@ class FetchTest extends FetchAbstract
         parent::__construct();
     }
 
+    /**
+     * Загружает HTML-ку из сети
+     *
+     * @param $id
+     * @return string
+     * @throws \GuzzleHttp\Exception\GuzzleException
+     */
     public function loadPage($id)
     {
         $client_raw = new Client([
@@ -116,14 +123,27 @@ class FetchTest extends FetchAbstract
         return $request->getBody()->getContents() ?? "";
     }
 
-    public function save($id, $content)
+    /**
+     * Сохраняет контент в файл на диск (кэширует)
+     *
+     * @param $id
+     * @param $content
+     * @return void
+     */
+    public function storeFile($id, $content)
     {
         $f = fopen("{$id}.html", "w+");
         fwrite($f, $content, strlen($content));
         fclose($f);
     }
 
-    public function load($id)
+    /**
+     * Загружает файл с диска
+     *
+     * @param $id
+     * @return false|string
+     */
+    public function restoreFile($id)
     {
         $f = fopen("{$id}.html", "r+");
         $content = fread($f, 10_000_000);
@@ -137,10 +157,10 @@ class FetchTest extends FetchAbstract
 
         $data = [
             'work_id'       =>  0,
-            'title'         =>  trim($d->node('.book-title > span[itemprop="name"]')),
-            'annotation'    =>  trim($d->node('.annotation > div.rich-content:nth-child(1)')),
-            'author_notes'  =>  trim($d->node('.annotation > div.rich-content:nth-child(2)')),
-            'cover_url'     =>  $d->attr('img.cover-image', 'src'),
+            'title'         =>  '',
+            'annotation'    =>  '',
+            'author_notes'  =>  '',
+            'cover_url'     =>  '',
 
             'price'         =>  0,
             'status'        =>  'Free',
@@ -149,7 +169,7 @@ class FetchTest extends FetchAbstract
             'audioLength'   =>  0,
 
             'likeCount'         =>  0,
-            'commentCount'      =>  0, /*$d->node('#commentTotalCount')*/ // узнать невозможно, кол-во догружается аяксом
+            'commentCount'      =>  0, // узнать невозможно, кол-во догружается аяксом
             'rewardCount'       =>  $d->find('.panel .panel-heading a:nth-child(4)') ? $d->node('.panel .panel-heading a:nth-child(4)') : 0,
             'chapters'          =>  [],
             'freeChapterCount'  =>  0,
@@ -163,11 +183,12 @@ class FetchTest extends FetchAbstract
             'promoFragment' =>  '',
             'adultOnly'     =>  '',
 
-            'isFinished'    =>  0,
-            'finishTime'    =>  (Carbon::createFromTime())->toDateTimeString(),
 
-            'lastUpdateTime'    =>  '',
-            'lastModificationTime'  =>  '',
+            'isFinished'    =>  0,
+            'finishTime'    =>  (Carbon::createFromTimestamp(0))->toDateTimeString(),
+
+            'lastUpdateTime'    =>  (Carbon::createFromTimestamp(0))->toDateTimeString(),
+            'lastModificationTime'  =>  (Carbon::createFromTimestamp(0))->toDateTimeString(),
 
             'workForm'      =>  '',
 
@@ -175,23 +196,62 @@ class FetchTest extends FetchAbstract
             'firstSubGenreId'   =>  0,
             'secondSubGenreId'  =>  0,
 
-            'tags'  =>  '',
+            'tags'  =>  [],
 
-            'state'     =>  '',
-            'format'    =>  '',
-            'privacyDisplay'    =>  ''
+            'reciter'   =>  '',
+
+            'state'     =>  'Default',
+            'format'    =>  'Audiobook',
+            'privacyDisplay'    =>  'All'
         ];
 
-        // признак завершения аудиокниги и дата завершения
+        /*
+         * название, аннотация, авторские примечания
+         */
+        if ($d->find('.book-title > span[itemprop="name"]')) {
+            $data['title'] = trim($d->node('.book-title > span[itemprop="name"]'));
+        }
+        if ($d->find('.annotation > div.rich-content:nth-child(1)')) {
+            $data['annotation'] = trim($d->node('.annotation > div.rich-content:nth-child(1)'));
+        }
+        if ($d->find('.annotation > div.rich-content:nth-child(2)')) {
+            $data['author_notes'] = trim($d->node('.annotation > div.rich-content:nth-child(2)'));
+        }
+
+        if ($d->find('img.cover-image')) {
+            $data['cover_url'] = $d->attr('img.cover-image', 'src');
+        }
+
+        /*
+         * lastUpdateTime - Время последнего обновления книги. Изменение одного из свойств
+         * берем из поля "datePublished" в ld+json
+         */
+        $pattern_last_update_time = <<<PATTERN_LAST_UPDATE
+"datePublished":\s+"(?'dt'[\d\-\:TZ\.]+)"
+PATTERN_LAST_UPDATE;
+        if ( ($r = Regex::match("/{$pattern_last_update_time}/", $content))->hasMatch()) {
+            $data['lastUpdateTime'] = Carbon::parse( $r->namedGroup('dt') )->toDateTimeString();
+        }
+
+        /*
+         * lastModificationTime - Время последнего изменения текста на +15 000 знаков или добавление файла главы.
+         * Берем из поля "dateModified" из ld+json
+         */
+        $pattern_last_modification_time = <<<PATTERN_LAST_MOD
+"dateModified":\s+"(?'dt'[\d\-\:TZ\.]+)"
+PATTERN_LAST_MOD;
+        if ( ($r = Regex::match("/{$pattern_last_modification_time}/", $content))->hasMatch()) {
+            $data['lastModificationTime'] = Carbon::parse( $r->namedGroup('dt') )->toDateTimeString();
+        }
+
+        /*
+         * признак завершения аудиокниги и дата завершения
+         */
         $data['isFinished'] = preg_match('/аудиокнига завершена/', $content);
         if ($data['isFinished']) {
             $data['finishTime'] = Carbon::parse(
                 $d->attr('div.book-meta-panel span.hint-top[data-time]', 'data-time')
             )->toDateTimeString();
-        } else {
-            // ?
-            // 'lastUpdateTime'    =>  '',
-            // 'lastModificationTime'  =>  '',
         }
 
         /**
@@ -206,15 +266,31 @@ class FetchTest extends FetchAbstract
             $data['status'] = $buy_button_params['workStatus'];
         }
 
-        // компилируем информацию об авторах
-
         /*
          * Собираем информацию об авторах из двух источников
+         *
+         * Информация с hide-button нам дает информации и о серии (возможной)
          * */
         $authors_ids = [];
         if (!empty($d->find('hide-button')) && $hide_button_params = $d->attr('hide-button', 'params')) {
             $hide_button_params = json_decode($hide_button_params, true);
             $authors_ids = array_flip($hide_button_params['authors']);
+
+            if (
+                array_key_exists('seriesTitle', $hide_button_params)
+                &&
+                array_key_exists('seriesId', $hide_button_params)
+            ) {
+                $data['seriesTitle'] = $hide_button_params['seriesTitle'];
+                $data['seriesId'] = $hide_button_params['seriesId'];
+
+                $pattern = <<<SERIES_ORDER_PATTERN
+<a href="\/work\/series\/\d+">.+<\/a><span>&nbsp;#(?'seriesOrder'\d+)<\/span>
+SERIES_ORDER_PATTERN;
+                if ( ($r = Regex::match("/{$pattern}/", $content))->hasMatch()) {
+                    $data['seriesOrder'] = (int)$r->namedGroup('seriesOrder');
+                }
+            } // series info
         }
 
         $authors = [];
@@ -257,12 +333,16 @@ class FetchTest extends FetchAbstract
             ];
         }
 
-        // число лайков
+        /**
+         * количество лайков
+         * */
         if (($r = Regex::match('/likeCount:\s(\d+),/', $content))->hasMatch()) {
             $data['likeCount'] = $r->group(1);
         }
 
-        // форма произведения
+        /*
+         * форма произведения
+         */
         $genres = $d->find('div.book-genres a');
 
         if (array_key_exists(0, $genres)) {
@@ -270,7 +350,9 @@ class FetchTest extends FetchAbstract
             $data['workForm'] = $this->mapWorkForms[ $workForm->text() ];
         }
 
-        // жанры
+        /*
+         * ЖАНРЫ
+         */
         if (array_key_exists(1, $genres)) {
             $genre = $genres[1];
             $data['genreId'] = $this->mapGenres[ $genre->text() ];
@@ -285,9 +367,82 @@ class FetchTest extends FetchAbstract
             $data['secondSubGenreId'] = $this->mapGenres[ $genre->text() ];
         }
 
-        // $d->find('.book-meta-panel > div:nth-child(3) > div:nth-child(3) > span:nth-child(3)')
+        /*
+         * Число глав и число доступных глав
+         */
+        $data['freeChapterCount'] = count($d->find("div.audio-chapters div.chapter-available"));
+        // $data['chapters']   = $d->find("div.audio-chapters div.chapter");
+        $data['chapters'] = array_fill(0, count($d->find("div.audio-chapters div.chapter")), 'chapter');
 
-        dd($data);
+        /*
+         * теги
+         */
+        $tags = [];
+        if (!empty($tags_collection = $d->find("span.tags > a"))) {
+            foreach ($tags_collection as $tag) {
+                $tags[] = $tag->attr("title");
+            }
+        }
+        $data['tags'] = $tags;
+
+        /*
+         * длительность звучания в секундах
+         */
+        $audio_length = 0;
+        $audio_length_pattern = "((?'hours'\d+)\s+ч\.)?\s+((?'minutes'\d+)\s+мин\.)\s+((?'seconds'\d+)\s+сек\.)?";
+        if ( ($r = Regex::match("/((?'hours'\d+)\sч\.)/", $content))->hasMatch()) {
+            $audio_length += 3600 * (int)$r->namedGroup('hours');
+        }
+
+        if ( ($r = Regex::match("/((?'minutes'\d+)\sмин\.)/", $content))->hasMatch()) {
+            $audio_length += 60 * (int)$r->namedGroup('minutes');
+        }
+
+        if ( ($r = Regex::match("/((?'seconds'\d+)\sсек\.)/", $content))->hasMatch()) {
+            $audio_length += 60 * (int)$r->namedGroup('seconds');
+        }
+        $data['audioLength'] = $audio_length;
+
+        /*
+         * Adult Only or not
+         */
+        if ( ($r = Regex::match("/adultOnly:\s(?'adultOnly'true|false)/", $content))->hasMatch() ) {
+            $adult_flag = $r->namedGroup('adultOnly');
+            $data['adultOnly'] = match ($adult_flag) {
+                'true'  =>  1,
+                default =>  0
+            };
+        }
+
+        /*
+         * Reciters - чтецы
+         */
+        $reciters = [];
+        if ($_reciters = $d->find('div.book-meta-panel > div:nth-child(3) > div:nth-child(4) a')) {
+            foreach ($_reciters as $r) {
+                $reciters[] = $r->text();
+            }
+        }
+        // $data['reciter'] = json_encode($reciters)
+        $data['reciter'] = implode(' ', $reciters);
+        // а ссылка с чтецов такая:
+        // <a href="/search?category=works&amp;q=%D0%95%D0%BB%D0%B5%D0%BD%D0%B0%20%D0%9F%D0%BE%D1%80%D0%BE%D1%88%D0%B8%D0%BD%D0%B0&amp;field=reciter">Елена Порошина</a>
+
+        /**
+         * Флаг "эксклюзив"
+         */
+        if ( (Regex::match("/\<span\>Эксклюзив\<\/span\>/", $content))->hasMatch()) {
+            $data['isExclusive'] = 1;
+        }
+
+        /**
+         * Флаг "ознакомительный фрагмент"
+         */
+        if ( $d->find('span.book-promo-label') ||
+            (Regex::match("/ознакомительный фрагмент\<\/span\>/", $content))->hasMatch()
+        ) {
+            $data['promoFragment'] = 1;
+        }
 
         return $data;
     }

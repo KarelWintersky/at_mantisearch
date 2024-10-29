@@ -67,7 +67,7 @@ CREATE TABLE `works` (
     `time_finished` datetime DEFAULT NULL COMMENT 'дата завершения книги, если флаг завершения 1',
     
     `text_length` int(11) DEFAULT 0 COMMENT 'длина книги в знаках',
-    `audio_length` int(11) DEFAULT 0 COMMENT 'длительность аудикниги в минутах',
+    `audio_length` int(11) DEFAULT 0 COMMENT 'длительность аудиокниги в секундах',
     
     `price` decimal(8,4) DEFAULT NULL COMMENT 'цена книги в рублях',
     
@@ -99,7 +99,9 @@ CREATE TABLE `works` (
     `genre_2nd` int(11) DEFAULT NULL COMMENT 'жанр второй',
     `genre_3rd` int(11) DEFAULT NULL COMMENT 'жанр третий',
     `genres` varchar(250) DEFAULT '' COMMENT 'id жанров, jsonized ids array for MVA',
-    
+
+    `reciter` varchar(250) DEFAULT '' COMMENT 'чтец(ы) - только для аудиокниги',
+
     PRIMARY KEY (`id`),
     KEY `work_id` (`work_id`),
     KEY `latest_fetch` (`latest_fetch`),

@@ -91,6 +91,8 @@ https://api.author.today/help/api/get-v1-work-id-meta-info
 
 ## Получить полную информацию о книге (97929)
 
+https://api.author.today/help/api/get-v1-work-id-details_orderid_orderstatus_recommendationscount
+
 `curl -H "Authorization: Bearer guest" -X GET https://api.author.today/v1/work/97929/details`
 
 ```json5

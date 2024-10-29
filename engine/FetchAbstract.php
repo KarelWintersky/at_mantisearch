@@ -30,19 +30,19 @@ class FetchAbstract
      * @param string $table
      * @param string $field
      * @param int $chunk_size
-     * @param bool $include_audiobooks
+     * @param bool $parse_audiobooks
      * @return array
      */
-    public function getLowestIds(string $table = '', string $field = "work_id", int $chunk_size = 1, bool $include_audiobooks = false):array
+    public function getLowestIds(string $table = '', string $field = "work_id", int $chunk_size = 1, bool $parse_audiobooks = false):array
     {
         if (empty($table)) {
             return [];
         }
 
         $sql
-            = $include_audiobooks
-            ? "SELECT {$field} FROM {$table} WHERE is_broken = 0 AND latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
-            : "SELECT {$field} FROM {$table} WHERE is_broken = 0 AND is_audio = 0 AND latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
+            = $parse_audiobooks
+            ? "SELECT {$field} FROM {$table} WHERE need_delete = 0 AND need_update = 1 AND is_broken = 0                  AND latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
+            : "SELECT {$field} FROM {$table} WHERE need_delete = 0 AND need_update = 1 AND is_broken = 0 AND is_audio = 0 AND latest_parse IS NULL ORDER BY id LIMIT {$chunk_size}"
         ;
 
         $sth = $this->db->query($sql);
@@ -110,7 +110,7 @@ class FetchAbstract
         }
 
         return (new Query(App::$PDO))->update($table, [
-            'need_delete'   =>  1
+            'need_delete'   =>  1,
         ])->where('work_id', (int)$id)->execute();
     }
 

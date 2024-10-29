@@ -6,6 +6,9 @@
 namespace ATFinder;
 
 use DiDom\Document;
+use DiDom\Element;
+use DiDom\Exceptions\InvalidSelectorException;
+use JetBrains\PhpStorm\NoReturn;
 
 class DiDomWrapper
 {
@@ -18,28 +21,30 @@ class DiDomWrapper
     }
 
     /**
-     * @param $find_pattern
-     * @param $attr - src
-     * @return \DiDom\Element|\DOMElement|string|null
-     * @throws \DiDom\Exceptions\InvalidSelectorException
+     * @param string $find_pattern
+     * @param string $attr - src
+     * @param int $index
+     * @return Element|\DOMElement|string|null
+     * @throws InvalidSelectorException
      */
-    public function attr($find_pattern = '', $attr = '', $index = 0)
+    public function attr(string $find_pattern = '', string $attr = '', int $index = 0): Element|string|\DOMElement|null
     {
         return $this->document->find($find_pattern)[$index]->attr($attr);
     }
 
     /**
-     * @param $find_pattern
-     * @param $field - textContent or nodeValue
-     * @param $index
+     * @param string $find_pattern
+     * @param string $field - textContent or nodeValue
+     * @param int $index
      * @return mixed
      * @throws \DiDom\Exceptions\InvalidSelectorException
      */
-    public function node($find_pattern = '', $field = 'textContent', $index = 0)
+    public function node(string $find_pattern = '', string $field = 'textContent', int $index = 0): mixed
     {
         return $this->document->find($find_pattern)[$index]->getNode()->{$field};
     }
 
+    #[NoReturn]
     public function dnode($find_pattern = '', $field = 'textContent', $index = 0)
     {
         dd(
@@ -47,7 +52,7 @@ class DiDomWrapper
         );
     }
 
-    public function find($pattern)
+    public function find($pattern): array
     {
         return $this->document->find($pattern);
     }

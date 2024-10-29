@@ -21,11 +21,16 @@ App::$PDO = new \Arris\Database\DBWrapper([
 ]);
 
 $p = new \ATFinder\Fetch\FetchTest();
-$id = 256669;
+$id = 311474;
 
-// $content = $p->loadPage($id);
-// $p->save($id, $content);
+if (!file_exists(__DIR__ . "{$id}.html")) {
+    $content = $p->loadPage($id);
+    $p->storeFile($id, $content);
+} else {
+    $content = $p->restoreFile($id);
+}
 
-$content = $p->load($id);
-$p->parse($content);
+$data = $p->parse($content);
+
+var_dump($data);
 

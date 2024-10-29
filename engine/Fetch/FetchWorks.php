@@ -133,18 +133,6 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             $timer['makeSQLDataset'] += (microtime(true) - $start);$start = microtime(true);
 
-            /*
-            $bid = $fluent->from('works')->where("work_id", $work_id)->fetchColumn();
-            $timer['fetchID'] += (microtime(true) - $start);$start = microtime(true);
-
-            if (empty($bid)) {
-                $fluent->insertInto("works")->values($sql_data)->execute();
-                CLIConsole::say("Inserted", false);
-            } else {
-                $fluent->update('works', $sql_data, $work_id)->execute();
-                CLIConsole::say("Updated", false);
-            }*/
-
             try {
                 $fluent->update('works', $sql_data)->where("work_id = {$work_id}")->execute();
 
