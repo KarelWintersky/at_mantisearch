@@ -3,24 +3,13 @@
 namespace ATFinder\Fetch;
 
 use AJUR\FluentPDO\Exception;
-use AJUR\FluentPDO\Literal;
 use AJUR\FluentPDO\Query;
 use Arris\CLIConsole;
-use Arris\Entity\Result;
 use ATFinder\App;
-use ATFinder\DiDomWrapper;
 use ATFinder\FetchAbstract;
 use ATFinder\FetchInterface;
 use ATFinder\Process\ProcessWorks;
-use Carbon\Carbon;
-use DiDom\Document;
-use DiDom\Element;
-use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
-use LitEmoji\LitEmoji;
-use Normalizer;
-use RuntimeException;
-use Spatie\Regex\Regex;
 
 class FetchWorks extends FetchAbstract implements FetchInterface
 {
@@ -28,20 +17,13 @@ class FetchWorks extends FetchAbstract implements FetchInterface
     public array $BAD_WORKS_IDS = [
     ];
 
-    private bool $parse_audiobooks = false;
-
-    /**
-     * Timezone
-     * @var string
-     */
-    private string $timezone;
+    private bool $parse_audiobooks;
 
     public function __construct($parse_audiobooks = false)
     {
         parent::__construct();
 
         $this->parse_audiobooks = $parse_audiobooks;
-        $this->timezone = 'Europe/Moscow';
     }
 
     /**
@@ -54,6 +36,11 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             $ids = $this->getLowestIds('works', 'work_id',   $chunk_size, $this->parse_audiobooks);
         } else {
             $ids = [$id];
+        }
+
+        if (empty($ids)) {
+            CLIConsole::say('Nothing to do, dataset is empty');
+            return 0;
         }
 
         $fluent = new Query(App::$PDO);
@@ -137,7 +124,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             $timer['writeJSON'] += (microtime(true) - $start);$start = microtime(true);
 
-            $sql_data = $this->makeSqlDataset($work_id, $work);
+            $sql_data = ProcessWorks::makeSqlDataset($work_id, $work);
 
             if (empty($sql_data)) {
                 CLIConsole::say(" Skipped due incorrect SQL Data");
@@ -181,104 +168,12 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                     number_format(1000 * $t / $total_rows, 3, '.', ' ')
             ));
         }
+
+        return true;
     }
 
 
-    private function makeSqlDataset(int $id, array $work):array
-    {
-        $data = [
-            'work_id'           =>  $id,
-            'latest_parse'      =>  new Literal('NOW()'),
 
-            'need_update'       =>  0,
-
-            'work_form'         =>  $work['workForm'] ?? 'Any',
-            'work_status'       =>  $work['status'] ?? 'Free',
-            'work_state'        =>  $work['state'] ?? 'Default',
-            'work_format'       =>  $work['format'] ?? 'Any',
-            'work_privacy'      =>  $work['privacyDisplay'] ?? 'All',
-
-            'is_audio'          =>  (int)$work['isAudio'],
-            'is_exclusive'      =>  (int)($work['isExclusive'] ?? 'false'),
-            'is_promofragment'  =>  (int)($work['promoFragment'] ?? 'false'),
-            'is_finished'       =>  (int)($work['isFinished'] ?? 'false'),
-            'is_draft'          =>  (int)($work['isDraft'] ?? 'false'),
-            'is_adult'          =>  (int)($work['adultOnly'] ?? 'false'),
-            'is_adult_pwp'      =>  (int)($work['isPwp'] ?? 'false'),
-
-            'count_like'        =>  $work['likeCount'] ?? 0,
-            'count_comments'    =>  $work['commentCount'] ?? 0,
-            'count_rewards'     =>  $work['rewardCount'] ?? 0,
-            'count_chapters'        =>  count($work['chapters'] ?? [1]),
-            'count_chapters_free'   =>  $work['freeChapterCount'] ?? 1,
-            'count_review'      =>  $work['reviewCount'] ?? 0,
-
-            'time_last_update'          =>  (Carbon::parse($work['lastUpdateTime'], $this->timezone))->toDateTimeString(),
-            'time_last_modification'    =>  (Carbon::parse($work['lastModificationTime'], $this->timezone))->toDateTimeString(),
-            'time_finished'             =>  (Carbon::parse($work['finishTime'], $this->timezone))->toDateTimeString(),
-
-            'text_length'       =>  $work['textLength'] ?? 0,
-            'audio_length'      =>  $work['audioLength'] ?? 0,
-
-            'price'             =>  $work['price'] ?? 0,
-
-            'title'         =>  $work['title'] ?? '',
-            'annotation'    =>  $work['annotation'] ?? '',
-            'author_notes'  =>  $work['authorNotes'] ?? '',
-            'cover_url'     =>  $work['coverUrl'] ?? '',
-
-            'series_id'     =>  $work['seriesId'] ?? 0,
-            'series_order'  =>  $work['seriesOrder'] ?? 0,
-            'series_title'  =>  $work['seriesTitle'] ?? '',
-
-            'tags'          =>  '',
-            'tags_text'     =>  implode(',', $work['tags'] ?? []),
-
-            'authorId'          =>  $work['authorId'] ?? $id,
-            'authorFIO'         =>  $work['authorFIO'] ?? '',
-            'authorUserName'    =>  $work['authorUserName'] ?? $id,
-
-            'coAuthorId'        =>  $work['coAuthorId'] ?? 0,
-            'coAuthorFIO'       =>  $work['coAuthorFIO'] ?? '',
-            'coAuthorUserName'  =>  $work['coAuthorUserName'] ?? '',
-
-            'secondCoAuthorId'  =>  $work['secondCoAuthorId'] ?? 0,
-            'secondCoAuthorFIO' =>  $work['secondCoAuthorFIO'] ?? '',
-            'secondCoAuthorUserName'    =>  $work['secondCoAuthorUserName'] ?? '',
-
-            'genre_main'    =>  $work['genreId'] ?? 0,
-            'genre_2nd'     =>  $work['firstSubGenreId'] ?? 0,
-            'genre_3rd'     =>  $work['secondSubGenreId'] ?? 0,
-            'genres'        =>  (function($work){
-                $genres = [];
-                if (array_key_exists('genreId', $work) && !is_null($work['genreId'])) {
-                    $genres[] = $work['genreId'];
-                }
-                if (array_key_exists('firstSubGenreId', $work) && !is_null($work['firstSubGenreId'])) {
-                    $genres[] = $work['firstSubGenreId'];
-                }
-                if (array_key_exists('secondSubGenreId', $work) && !is_null($work['secondSubGenreId'])) {
-                    $genres[] = $work['secondSubGenreId'];
-                }
-                return implode(',', $genres);
-            })($work),
-        ];
-
-        // remove emoji
-        // https://packagist.org/packages/wikimedia/utfnormal (to NFKC - выяснено экспериментально)
-        // https://habr.com/ru/articles/45489/
-        // или
-        // https://www.php.net/manual/en/class.normalizer.php
-
-        foreach (['title', 'annotation', 'author_notes', 'authorFIO', 'coAuthorFIO', 'secondCoAuthorFIO', 'series_title', 'tags_text'] as $key) {
-            $data[$key] = FetchAbstract::sanitize($data[$key]);
-        }
-
-        // https://dencode.com/string/unicode-normalization
-
-
-        return $data;
-    }
 
     /**
      * Помечает запись как аудиокнигу

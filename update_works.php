@@ -24,11 +24,9 @@ App::$PDO = new \Arris\Database\DBWrapper([
 ]);
 
 $parser = new \ATFinder\Fetch\FetchWorks(true);
-$parser->run(null, 100000);
+// $parser->run(null, 100000);
 
-// $parser->run(256669);
-// $parser->run(109778);
-// $parser->run(123837);
+$parser->run(257399);
 
 
 

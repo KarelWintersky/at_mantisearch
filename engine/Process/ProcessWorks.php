@@ -2,6 +2,7 @@
 
 namespace ATFinder\Process;
 
+use AJUR\FluentPDO\Literal;
 use Arris\Entity\Result;
 use ATFinder\DiDomWrapper;
 use ATFinder\FetchAbstract;
@@ -499,6 +500,111 @@ SERIES_ORDER_PATTERN;
     {
         $data = json_decode($work_result->response, true);
         $data['isAudio'] = 0;
+        return $data;
+    }
+
+    /**
+     * Билдит SQL-датасет
+     *
+     * @param int $id
+     * @param array $work
+     * @return array
+     */
+    public static function makeSqlDataset(int $id, array $work):array
+    {
+        $data = [
+            'work_id'           =>  $id,
+            'latest_parse'      =>  new Literal('NOW()'),
+
+            'need_update'       =>  0,
+
+            'work_form'         =>  $work['workForm'] ?? 'Any',
+            'work_status'       =>  $work['status'] ?? 'Free',
+            'work_state'        =>  $work['state'] ?? 'Default',
+            'work_format'       =>  $work['format'] ?? 'Any',
+            'work_privacy'      =>  $work['privacyDisplay'] ?? 'All',
+
+            'is_audio'          =>  (int)$work['isAudio'],
+            'is_exclusive'      =>  (int)($work['isExclusive'] ?? 'false'),
+            'is_promofragment'  =>  (int)($work['promoFragment'] ?? 'false'),
+            'is_finished'       =>  (int)($work['isFinished'] ?? 'false'),
+            'is_draft'          =>  (int)($work['isDraft'] ?? 'false'),
+            'is_adult'          =>  (int)($work['adultOnly'] ?? 'false'),
+            'is_adult_pwp'      =>  (int)($work['isPwp'] ?? 'false'),
+
+            'count_like'        =>  $work['likeCount'] ?? 0,
+            'count_comments'    =>  $work['commentCount'] ?? 0,
+            'count_rewards'     =>  $work['rewardCount'] ?? 0,
+            'count_chapters'        =>  count($work['chapters'] ?? [1]),
+            'count_chapters_free'   =>  $work['freeChapterCount'] ?? 1,
+            'count_review'      =>  $work['reviewCount'] ?? 0,
+
+            'time_last_update'          =>  (Carbon::parse($work['lastUpdateTime'], self::$timezone))->toDateTimeString(),
+            'time_last_modification'    =>  (Carbon::parse($work['lastModificationTime'], self::$timezone))->toDateTimeString(),
+            'time_finished'             =>  (Carbon::parse($work['finishTime'], self::$timezone))->toDateTimeString(),
+
+            'text_length'       =>  $work['textLength'] ?? 0,
+            'audio_length'      =>  $work['audioLength'] ?? 0,
+
+            'price'             =>  $work['price'] ?? 0,
+
+            'title'         =>  $work['title'] ?? '',
+            'annotation'    =>  $work['annotation'] ?? '',
+            'author_notes'  =>  $work['authorNotes'] ?? '',
+            'cover_url'     =>  $work['coverUrl'] ?? '',
+
+            'series_id'     =>  $work['seriesId'] ?? 0,
+            'series_order'  =>  $work['seriesOrder'] ?? 0,
+            'series_title'  =>  $work['seriesTitle'] ?? '',
+
+            'tags'          =>  '',
+            'tags_text'     =>  implode(',', $work['tags'] ?? []),
+
+            'authorId'          =>  $work['authorId'] ?? $id,
+            'authorFIO'         =>  $work['authorFIO'] ?? '',
+            'authorUserName'    =>  $work['authorUserName'] ?? $id,
+
+            'coAuthorId'        =>  $work['coAuthorId'] ?? 0,
+            'coAuthorFIO'       =>  $work['coAuthorFIO'] ?? '',
+            'coAuthorUserName'  =>  $work['coAuthorUserName'] ?? '',
+
+            'secondCoAuthorId'  =>  $work['secondCoAuthorId'] ?? 0,
+            'secondCoAuthorFIO' =>  $work['secondCoAuthorFIO'] ?? '',
+            'secondCoAuthorUserName'    =>  $work['secondCoAuthorUserName'] ?? '',
+
+            'genre_main'    =>  $work['genreId'] ?? 0,
+            'genre_2nd'     =>  $work['firstSubGenreId'] ?? 0,
+            'genre_3rd'     =>  $work['secondSubGenreId'] ?? 0,
+            'genres'        =>  (function($work){
+                $genres = [];
+                if (array_key_exists('genreId', $work) && !is_null($work['genreId'])) {
+                    $genres[] = $work['genreId'];
+                }
+                if (array_key_exists('firstSubGenreId', $work) && !is_null($work['firstSubGenreId'])) {
+                    $genres[] = $work['firstSubGenreId'];
+                }
+                if (array_key_exists('secondSubGenreId', $work) && !is_null($work['secondSubGenreId'])) {
+                    $genres[] = $work['secondSubGenreId'];
+                }
+                return implode(',', $genres);
+            })($work),
+
+            'reciter'       =>  $work['reciter']
+        ];
+
+        // remove emoji
+        // https://packagist.org/packages/wikimedia/utfnormal (to NFKC - выяснено экспериментально)
+        // https://habr.com/ru/articles/45489/
+        // или
+        // https://www.php.net/manual/en/class.normalizer.php
+
+        foreach (['title', 'annotation', 'author_notes', 'authorFIO', 'coAuthorFIO', 'secondCoAuthorFIO', 'series_title', 'tags_text'] as $key) {
+            $data[$key] = FetchAbstract::sanitize($data[$key]);
+        }
+
+        // https://dencode.com/string/unicode-normalization
+
+
         return $data;
     }
 
