@@ -2,6 +2,7 @@
 
 define('ENGINE_START_TIME', microtime(true));
 define('PATH_ENV', __DIR__);
+date_default_timezone_set('Europe/Moscow');
 
 use Arris\CLIConsole;
 use ATFinder\App;

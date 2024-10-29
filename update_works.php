@@ -2,6 +2,7 @@
 
 define('ENGINE_START_TIME', microtime(true));
 define('PATH_ENV', __DIR__);
+date_default_timezone_set('Europe/Moscow');
 
 use ATFinder\App;
 use Dotenv\Dotenv;
@@ -22,12 +23,12 @@ App::$PDO = new \Arris\Database\DBWrapper([
     'slow_query_threshold'  => 1
 ]);
 
-$parser = new \ATFinder\Fetch\FetchWorks(false);
+$parser = new \ATFinder\Fetch\FetchWorks(true);
 $parser->run(null, 100000);
 
 // $parser->run(256669);
 // $parser->run(109778);
-
+// $parser->run(123837);
 
 
 

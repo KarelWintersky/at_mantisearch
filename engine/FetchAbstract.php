@@ -14,6 +14,7 @@ use PDO;
 class FetchAbstract
 {
 
+
     /**
      * @var \Arris\Database\DBWrapper
      */

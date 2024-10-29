@@ -11,9 +11,12 @@ use ATFinder\App;
 use ATFinder\DiDomWrapper;
 use ATFinder\FetchAbstract;
 use ATFinder\FetchInterface;
+use ATFinder\Process\ProcessWorks;
 use Carbon\Carbon;
 use DiDom\Document;
+use DiDom\Element;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\GuzzleException;
 use LitEmoji\LitEmoji;
 use Normalizer;
 use RuntimeException;
@@ -23,19 +26,27 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 {
     // "битые" работы, результат парсинга которых не помещается в utf8mb4
     public array $BAD_WORKS_IDS = [
-        // 79508, 79777, 80125, 81575, 109778
     ];
 
     private bool $parse_audiobooks = false;
+
+    /**
+     * Timezone
+     * @var string
+     */
+    private string $timezone;
+
     public function __construct($parse_audiobooks = false)
     {
         parent::__construct();
 
         $this->parse_audiobooks = $parse_audiobooks;
+        $this->timezone = 'Europe/Moscow';
     }
 
     /**
      * @throws Exception
+     * @throws GuzzleException
      */
     public function run($id = null, $chunk_size = 10, $update_index = true)
     {
@@ -83,29 +94,30 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             CLIConsole::say(" ..loading remote data: ", false);
 
-            $work_result = $this->getWork($work_id, $this->parse_audiobooks);
+            $work_result = ProcessWorks::getWork($work_id, $this->parse_audiobooks);
 
             $timer_getWorkDetails = (microtime(true) - $start);
             $timer['getWorkDetails'] += $timer_getWorkDetails;$start = microtime(true);
 
             if ($work_result->is_error) {
-
-                $this->writeJSON($work_id, $work_result->response, true);
+                $this->writeJSON($work_id, $work_result->serialize(), true);
 
                 if ($work_result->getCode() == 404) {
-                    // $this->indexDeleteRecord($id, 'works');
                     $this->markForDelete($work_id, 'works');
-                    CLIConsole::say("Work deleted or moved to drafts");
+                    CLIConsole::say("Work deleted or moved to drafts (marked for delete)");
+                    continue;
+                }
+
+                if ($work_result->getCode() == 403) {
+                    $this->markForDelete($work_id, 'works');
+                    CLIConsole::say("Access restricted by author (work marked for delete)");
                     continue;
                 }
             }
 
-            $work = [];
-
             if ($work_result->isAudio) {
-
                 if ($this->parse_audiobooks) {
-                    $work = $this->parseAudioBook($work_id, $work_result);
+                    $work = ProcessWorks::parseAudioBook($work_id, $work_result);
                 } else {
                     CLIConsole::say(" Audiobook unsupported yet");
                     $this->writeJSON($work_id, $work_result->response, prefix: '__');
@@ -113,7 +125,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                     continue;
                 }
             } else {
-                $work = $this->parseBook($work_id, $work_result);
+                $work = ProcessWorks::parseBook($work_id, $work_result);
             }
 
             if (empty($work)) {
@@ -171,80 +183,8 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         }
     }
 
-    public function getWork($id, $fetch_audio = false):Result
-    {
-        $r = new Result();
-        $r->isAudio = false;
-        $r->isJSON = true;
-        $r->isHTML = false;
-        $r->response = "{}";
 
-        try {
-            $client_api = new Client([
-                'base_uri'  =>  'https://api.author.today/'
-            ]);
-            $request = $client_api->request(
-                'GET',
-                "v1/work/{$id}/details",
-                [
-                    'debug'     =>  false,
-                    'headers'   =>  [
-                        'Authorization' =>  "Bearer guest"
-                    ]
-                ]
-            );
-            $r->response = $request->getBody()->getContents() ?? "{}";
-
-            return $r;
-
-        } catch (RuntimeException|\Exception $e) {
-            $r->error($e->getMessage());
-            $r->setCode($e->getCode());
-
-            if (
-                $e->getCode() == 403 &&
-                Regex::match("/VersionIsUnsupported/", $e->getMessage())->hasMatch()
-            ) {
-                $r->success("Is Error");
-                $r->isAudio = true;
-            } elseif (Regex::match("/cURL error/", $e->getMessage())->hasMatch()) {
-                $r->setCode(35);
-                return $r;
-            } else {
-                return $r;
-            }
-        }
-
-        if ($fetch_audio === false) {
-            return $r;
-        }
-
-        try {
-            $client_raw = new Client([
-                'base_uri'  =>  'https://author.today/'
-            ]);
-            $request = $client_raw->request(
-                'GET',
-                "/audiobook/{$id}",
-                [
-                    'debug'     =>  false,
-                    'headers'   =>  [
-                        'Authorization' =>  "Bearer guest"
-                    ]
-                ]
-            );
-            $r->response = $response = $request->getBody()->getContents() ?? "{}";
-            $r->isHTML = true;
-            $r->isJSON = false;
-        } catch (RuntimeException|\Exception $e) {
-            $r->error($e->getMessage());
-            $r->setCode($e->getCode());
-    }
-
-        return $r;
-    }
-
-    private function makeSqlDataset(int $id, array $work, bool $is_audio = false):array
+    private function makeSqlDataset(int $id, array $work):array
     {
         $data = [
             'work_id'           =>  $id,
@@ -258,7 +198,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             'work_format'       =>  $work['format'] ?? 'Any',
             'work_privacy'      =>  $work['privacyDisplay'] ?? 'All',
 
-            'is_audio'          =>  $is_audio ? 1 : 0,
+            'is_audio'          =>  (int)$work['isAudio'],
             'is_exclusive'      =>  (int)($work['isExclusive'] ?? 'false'),
             'is_promofragment'  =>  (int)($work['promoFragment'] ?? 'false'),
             'is_finished'       =>  (int)($work['isFinished'] ?? 'false'),
@@ -273,9 +213,9 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             'count_chapters_free'   =>  $work['freeChapterCount'] ?? 1,
             'count_review'      =>  $work['reviewCount'] ?? 0,
 
-            'time_last_update'          =>  (Carbon::parse($work['lastUpdateTime']))->toDateTimeString(),
-            'time_last_modification'    =>  (Carbon::parse($work['lastModificationTime']))->toDateTimeString(),
-            'time_finished'             =>  (Carbon::parse($work['finishTime']))->toDateTimeString(),
+            'time_last_update'          =>  (Carbon::parse($work['lastUpdateTime'], $this->timezone))->toDateTimeString(),
+            'time_last_modification'    =>  (Carbon::parse($work['lastModificationTime'], $this->timezone))->toDateTimeString(),
+            'time_finished'             =>  (Carbon::parse($work['finishTime'], $this->timezone))->toDateTimeString(),
 
             'text_length'       =>  $work['textLength'] ?? 0,
             'audio_length'      =>  $work['audioLength'] ?? 0,
@@ -340,13 +280,21 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         return $data;
     }
 
+    /**
+     * Помечает запись как аудиокнигу
+     *
+     * @param mixed $id
+     * @param string $table
+     * @return bool|int|\PDOStatement
+     * @throws Exception
+     */
     private function markWorkAsAudiobook(mixed $id, string $table = '')
     {
         if (empty($table)) {
             return false;
         }
 
-        (new Query(App::$PDO))
+        return (new Query(App::$PDO))
             ->update($table, [
                 'is_audio'      =>  1,
             ])
@@ -354,50 +302,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             ->execute();
     }
 
-    public function parseAudioBook(mixed $id, Result $work_result)
-    {
-        $d = new DiDomWrapper($work_result->response);
 
-        $data = [
-            'title'         =>  $d->node('.book-title > span[itemprop="name"]'),
-            'annotation'    =>  $d->node('.annotation > div.rich-content:nth-child(1)'),
-            'author_notes'  =>  $d->node('.annotation > div.rich-content:nth-child(2)'),
-            'cover_url'     =>  $d->attr('img.cover-image', 'src'),
-
-            'seriesWorkIds' =>  [],
-            'seriesWorkNumber'  =>  str_replace(
-                [' ', '#'],
-                ['', ''],
-                $d->node('.book-meta-panel > div:nth-child(3) > div:nth-child(3) > span:nth-child(3)')
-            ),
-
-            'seriesId'      =>  0,
-            'seriesOrder'   =>  0,
-            'seriesTitle'   =>  '',
-
-            'isExclusive'   =>  '',
-            'promoFragment' =>  '',
-            'isFinished'    =>  '',
-            'adultOnly'     =>  '',
-
-            'lastUpdateTime'    =>  '',
-            'lastModificationTime'  =>  '',
-            'finishTime'        =>  '',
-
-            'textLength'    =>  0,
-            'price'         =>  0,
-
-        ];
-
-        dd($data);
-
-        return $data;
-    }
-
-    private function parseBook(mixed $id, Result $work_result)
-    {
-        return json_decode($work_result->response, true);
-    }
 
 
 
