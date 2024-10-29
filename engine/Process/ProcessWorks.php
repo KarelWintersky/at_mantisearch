@@ -6,6 +6,7 @@ use AJUR\FluentPDO\Literal;
 use Arris\Entity\Result;
 use ATFinder\DiDomWrapper;
 use ATFinder\FetchAbstract;
+use ATFinder\Mapping;
 use Carbon\Carbon;
 use DiDom\Element;
 use GuzzleHttp\Client;
@@ -15,86 +16,6 @@ use Spatie\Regex\Regex;
 class ProcessWorks
 {
     public static string $timezone = 'Europe/Moscow';
-
-    public static array $mapWorkForms = [
-        'Роман'                 =>  'Novel',
-        'Повесть'               =>  'Tale',
-        'Рассказ'               =>  'Story',
-        'Сборник рассказов'     =>  'StoryBook',
-        'Сборник поэзии'        =>  'Poetry',
-        'Перевод'               =>  'Translation'
-    ];
-
-    public static array $mapGenres = [
-        "Боевик"                    =>  5,
-        'Детектив'                  =>  4,
-        'Исторический детектив'     =>  50,
-        'Фантастический детектив'   =>  52,
-        'Шпионский детектив'        =>  51,
-        'Дорама'                    =>  75,
-        'Историческая проза'        =>  17,
-        'ЛитРПГ'                    =>  20,
-        'Любовные романы'           =>  6,
-        'Исторический любовный роман'   =>  46,
-        'Короткий любовный роман'   =>  45,
-        'Современный любовный роман'    =>  67,
-        'Мистика'               =>  10,
-        'Подростковая проза'    =>  16,
-        'Политический роман'    =>  49,
-        'Попаданцы'             =>  21,
-        'Назад в СССР'          =>  72,
-        'Попаданцы в космос'    =>  66,
-        'Попаданцы в магические миры'   =>  48,
-        'Попаданцы во времени'      =>  47,
-        'Поэзия'        =>  13,
-        'Приключения'   =>  8,
-        'Исторические приключения'  =>  70,
-        'Разное'        =>  19,
-        'Бизнес-литература' =>  61,
-        'Детская литература'    =>  58,
-        'Документальная проза'  =>  14,
-        'Публицистика'      =>  59,
-        'Развитие личности' =>  62,
-        'Сказка'        =>  60,
-        'РеалРПГ'       =>  69,
-        'Современная проза' =>  1,
-        'Русреал'   =>  76,
-        'Триллер'   =>  11,
-        'Ужасы'     =>  18,
-        'Фантастика'    =>  3,
-        'Альтернативная история'    =>  28,
-        'Антиутопия'    =>  29,
-        'Боевая фантастика' =>  30,
-        'Героическая фантастика'    =>  31,
-        'Киберпанк' =>  34,
-        'Космическая фантастика'    =>  33,
-        'Научная фантастика'    =>  36,
-        'Постапокалипсис'   =>  32,
-        'Социальная фантастика' =>  63,
-        'Стимпанк'  =>  35,
-        'Юмористическая фантастика' =>  37,
-        'Фанфик'    =>  9,
-        'Фэнтези'   =>  2,
-        'Боевое фэнтези'    =>  38,
-        'Бояръ-Аниме'   =>  71,
-        'Бытовое фэнтези'   =>  77,
-        'Героическое фэнтези'   =>  64,
-        'Городское фэнтези'     =>  39,
-        'Историческое фэнтези'  =>  41,
-        'Классическое фэнтези'  =>  78,
-        'Магическая академия'   =>  74,
-        'Романтическое фэнтези' =>  40,
-        'Темное фэнтези'    =>  44,
-        'Уся'   =>  73,
-        'Эпическое фэнтези' =>  43,
-        'Юмористическое фэнтези'    =>  42,
-        'Эротика'   =>  7,
-        'Романтическая эротика' =>  53,
-        'Эротическая фантастика'    =>  54,
-        'Эротический фанфик'    =>  56,
-        'Эротическое фэнтези'   =>  55,
-        'Юмор'  =>  12
-    ];
 
     /**
      * Загружает JSON-контент или текстовый контент, если это аудиокнига
@@ -389,7 +310,7 @@ SERIES_ORDER_PATTERN;
 
         if (array_key_exists(0, $genres)) {
             $workForm = $genres[0];
-            $data['workForm'] = self::$mapWorkForms[ $workForm->text() ];
+            $data['workForm'] = Mapping::$map_WorkForms[ $workForm->text() ];
         }
 
         /*
@@ -397,16 +318,16 @@ SERIES_ORDER_PATTERN;
          */
         if (array_key_exists(1, $genres)) {
             $genre = $genres[1];
-            $data['genreId'] = self::$mapGenres[ $genre->text() ];
+            $data['genreId'] = Mapping::$map_GenreToID[ $genre->text() ];
         }
 
         if (array_key_exists(2, $genres)) {
             $genre = $genres[2];
-            $data['firstSubGenreId'] = self::$mapGenres[ $genre->text() ];
+            $data['firstSubGenreId'] = Mapping::$map_GenreToID[ $genre->text() ];
         }
         if (array_key_exists(3, $genres)) {
             $genre = $genres[3];
-            $data['secondSubGenreId'] = self::$mapGenres[ $genre->text() ];
+            $data['secondSubGenreId'] = Mapping::$map_GenreToID[ $genre->text() ];
         }
 
         /*
@@ -513,69 +434,69 @@ SERIES_ORDER_PATTERN;
     public static function makeSqlDataset(int $id, array $work):array
     {
         $data = [
-            'work_id'           =>  $id,
-            'latest_parse'      =>  new Literal('NOW()'),
+            'work_id'               =>  $id,
+            'latest_parse'          =>  new Literal('NOW()'),
 
-            'need_update'       =>  0,
+            'need_update'           =>  0,
 
-            'work_form'         =>  $work['workForm'] ?? 'Any',
-            'work_status'       =>  $work['status'] ?? 'Free',
-            'work_state'        =>  $work['state'] ?? 'Default',
-            'work_format'       =>  $work['format'] ?? 'Any',
-            'work_privacy'      =>  $work['privacyDisplay'] ?? 'All',
+            'work_form'             =>  $work['workForm'] ?? 'Any',
+            'work_status'           =>  $work['status'] ?? 'Free',
+            'work_state'            =>  $work['state'] ?? 'Default',
+            'work_format'           =>  $work['format'] ?? 'Any',
+            'work_privacy'          =>  $work['privacyDisplay'] ?? 'All',
 
-            'is_audio'          =>  (int)$work['isAudio'],
-            'is_exclusive'      =>  (int)($work['isExclusive'] ?? 'false'),
-            'is_promofragment'  =>  (int)($work['promoFragment'] ?? 'false'),
-            'is_finished'       =>  (int)($work['isFinished'] ?? 'false'),
-            'is_draft'          =>  (int)($work['isDraft'] ?? 'false'),
-            'is_adult'          =>  (int)($work['adultOnly'] ?? 'false'),
-            'is_adult_pwp'      =>  (int)($work['isPwp'] ?? 'false'),
+            'is_audio'              =>  (int)$work['isAudio'],
+            'is_exclusive'          =>  (int)($work['isExclusive'] ?? 'false'),
+            'is_promofragment'      =>  (int)($work['promoFragment'] ?? 'false'),
+            'is_finished'           =>  (int)($work['isFinished'] ?? 'false'),
+            'is_draft'              =>  (int)($work['isDraft'] ?? 'false'),
+            'is_adult'              =>  (int)($work['adultOnly'] ?? 'false'),
+            'is_adult_pwp'          =>  (int)($work['isPwp'] ?? 'false'),
 
-            'count_like'        =>  $work['likeCount'] ?? 0,
-            'count_comments'    =>  $work['commentCount'] ?? 0,
-            'count_rewards'     =>  $work['rewardCount'] ?? 0,
+            'count_like'            =>  $work['likeCount'] ?? 0,
+            'count_comments'        =>  $work['commentCount'] ?? 0,
+            'count_rewards'         =>  $work['rewardCount'] ?? 0,
             'count_chapters'        =>  count($work['chapters'] ?? [1]),
             'count_chapters_free'   =>  $work['freeChapterCount'] ?? 1,
-            'count_review'      =>  $work['reviewCount'] ?? 0,
+            'count_review'          =>  $work['reviewCount'] ?? 0,
 
-            'time_last_update'          =>  (Carbon::parse($work['lastUpdateTime'], self::$timezone))->toDateTimeString(),
-            'time_last_modification'    =>  (Carbon::parse($work['lastModificationTime'], self::$timezone))->toDateTimeString(),
-            'time_finished'             =>  (Carbon::parse($work['finishTime'], self::$timezone))->toDateTimeString(),
+            'time_last_update'      =>  (Carbon::parse($work['lastUpdateTime'], self::$timezone))->toDateTimeString(),
+            'time_last_modification'=>  (Carbon::parse($work['lastModificationTime'], self::$timezone))->toDateTimeString(),
+            'time_finished'         =>  (Carbon::parse($work['finishTime'], self::$timezone))->toDateTimeString(),
 
-            'text_length'       =>  $work['textLength'] ?? 0,
-            'audio_length'      =>  $work['audioLength'] ?? 0,
+            'text_length'           =>  $work['textLength'] ?? 0,
+            'audio_length'          =>  $work['audioLength'] ?? 0,
 
-            'price'             =>  $work['price'] ?? 0,
+            'price'                 =>  $work['price'] ?? 0,
 
-            'title'         =>  $work['title'] ?? '',
-            'annotation'    =>  $work['annotation'] ?? '',
-            'author_notes'  =>  $work['authorNotes'] ?? '',
-            'cover_url'     =>  $work['coverUrl'] ?? '',
+            'title'                 =>  $work['title'] ?? '',
+            'annotation'            =>  $work['annotation'] ?? '',
+            'author_notes'          =>  $work['authorNotes'] ?? '',
+            'cover_url'             =>  $work['coverUrl'] ?? '',
 
-            'series_id'     =>  $work['seriesId'] ?? 0,
-            'series_order'  =>  $work['seriesOrder'] ?? 0,
-            'series_title'  =>  $work['seriesTitle'] ?? '',
+            'series_id'             =>  $work['seriesId'] ?? 0,
+            'series_order'          =>  $work['seriesOrder'] ?? 0,
+            'series_title'          =>  $work['seriesTitle'] ?? '',
 
-            'tags'          =>  '',
-            'tags_text'     =>  implode(',', $work['tags'] ?? []),
+            'tags'                  =>  '',
+            'tags_text'             =>  implode(',', $work['tags'] ?? []),
 
-            'authorId'          =>  $work['authorId'] ?? $id,
-            'authorFIO'         =>  $work['authorFIO'] ?? '',
-            'authorUserName'    =>  $work['authorUserName'] ?? $id,
+            'authorId'              =>  $work['authorId'] ?? $id,
+            'authorFIO'             =>  $work['authorFIO'] ?? '',
+            'authorUserName'        =>  $work['authorUserName'] ?? $id,
 
-            'coAuthorId'        =>  $work['coAuthorId'] ?? 0,
-            'coAuthorFIO'       =>  $work['coAuthorFIO'] ?? '',
-            'coAuthorUserName'  =>  $work['coAuthorUserName'] ?? '',
+            'coAuthorId'            =>  $work['coAuthorId'] ?? 0,
+            'coAuthorFIO'           =>  $work['coAuthorFIO'] ?? '',
+            'coAuthorUserName'      =>  $work['coAuthorUserName'] ?? '',
 
-            'secondCoAuthorId'  =>  $work['secondCoAuthorId'] ?? 0,
-            'secondCoAuthorFIO' =>  $work['secondCoAuthorFIO'] ?? '',
-            'secondCoAuthorUserName'    =>  $work['secondCoAuthorUserName'] ?? '',
+            'secondCoAuthorId'      =>  $work['secondCoAuthorId'] ?? 0,
+            'secondCoAuthorFIO'     =>  $work['secondCoAuthorFIO'] ?? '',
+            'secondCoAuthorUserName'=>  $work['secondCoAuthorUserName'] ?? '',
 
-            'genre_main'    =>  $work['genreId'] ?? 0,
-            'genre_2nd'     =>  $work['firstSubGenreId'] ?? 0,
-            'genre_3rd'     =>  $work['secondSubGenreId'] ?? 0,
-            'genres'        =>  (function($work){
+            'genre_main'            =>  $work['genreId'] ?? 0,
+            'genre_2nd'             =>  $work['firstSubGenreId'] ?? 0,
+            'genre_3rd'             =>  $work['secondSubGenreId'] ?? 0,
+            'genres'                =>  (function($work){
                 $genres = [];
                 if (array_key_exists('genreId', $work) && !is_null($work['genreId'])) {
                     $genres[] = $work['genreId'];
@@ -589,7 +510,7 @@ SERIES_ORDER_PATTERN;
                 return implode(',', $genres);
             })($work),
 
-            'reciter'       =>  $work['reciter']
+            'reciter'               =>  $work['reciter']
         ];
 
         // remove emoji

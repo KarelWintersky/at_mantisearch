@@ -6,6 +6,7 @@ date_default_timezone_set('Europe/Moscow');
 
 use Arris\CLIConsole;
 use ATFinder\App;
+use ATFinder\File;
 use Dotenv\Dotenv;
 
 require __DIR__ . '/vendor/autoload.php';
@@ -43,5 +44,5 @@ $parser = new \ATFinder\IndexFetcher();
 // $parser->updateSQL('upd_authors', $authors, true);
 
 $works = $parser->loadWorks();
-$parser->writeCSV("_works.csv", ['id', 'lastmod', 'lastmod_ts'], $works);
 $parser->updateSQLWorks($works);
+File::writeCSV("_works.csv", ['id', 'lastmod', 'lastmod_ts'], $works);

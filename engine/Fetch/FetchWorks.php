@@ -8,6 +8,7 @@ use Arris\CLIConsole;
 use ATFinder\App;
 use ATFinder\FetchAbstract;
 use ATFinder\FetchInterface;
+use ATFinder\File;
 use ATFinder\Process\ProcessWorks;
 use GuzzleHttp\Exception\GuzzleException;
 
@@ -75,7 +76,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
             if (in_array($work_id, $this->BAD_WORKS_IDS)) {
                 CLIConsole::say("... is skipped by internal rule");
-                $this->updateIndexRecord($work_id, 'works');
+                $this->setFlag($work_id, 'is_broken', 1);
                 continue;
             }
 
@@ -87,16 +88,16 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             $timer['getWorkDetails'] += $timer_getWorkDetails;$start = microtime(true);
 
             if ($work_result->is_error) {
-                $this->writeJSON($work_id, $work_result->serialize(), true);
+                File::writeJSON($work_id, $work_result->serialize(), true, dir: App::$PROJECT_ROOT . "/json");
 
                 if ($work_result->getCode() == 404) {
-                    $this->markForDelete($work_id, 'works');
+                    $this->setFlag($work_id, 'need_delete', 1);
                     CLIConsole::say("Work deleted or moved to drafts (marked for delete)");
                     continue;
                 }
 
                 if ($work_result->getCode() == 403) {
-                    $this->markForDelete($work_id, 'works');
+                    $this->setFlag($work_id, 'need_delete', 1);
                     CLIConsole::say("Access restricted by author (work marked for delete)");
                     continue;
                 }
@@ -107,8 +108,8 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                     $work = ProcessWorks::parseAudioBook($work_id, $work_result);
                 } else {
                     CLIConsole::say(" Audiobook unsupported yet");
-                    $this->writeJSON($work_id, $work_result->response, prefix: '__');
-                    $this->markWorkAsAudiobook($work_id);
+                    File::writeJSON($work_id, $work_result->response, prefix: '__', dir: App::$PROJECT_ROOT . "/json");
+                    $this->setFlag($work_id, 'is_audio', 1);
                     continue;
                 }
             } else {
@@ -120,7 +121,7 @@ class FetchWorks extends FetchAbstract implements FetchInterface
                 continue;
             }
 
-            $this->writeJSON($work_id, $work);
+            File::writeJSON($work_id, $work, dir: App::$PROJECT_ROOT . "/json");
 
             $timer['writeJSON'] += (microtime(true) - $start);$start = microtime(true);
 
@@ -142,13 +143,13 @@ class FetchWorks extends FetchAbstract implements FetchInterface
             } catch (\Exception $e) {
                 if ($e->getCode() == 22007) {
                     // SQLSTATE[22007]: Invalid datetime format: 1366 Incorrect string value
-                    $this->markBrokenWork($work_id, 'works');
+                    $this->setFlag($work_id, 'is_broken', 1);
                     CLIConsole::say("Work is broken. ", false);
                 }
             }
 
             if ($update_index) {
-                $this->updateIndexRecord($work_id, 'works');
+                $this->actualizeItem($work_id, 'works', 'work_id');
             }
 
             $timer['updateStatus']  += (microtime(true) - $start);$start = microtime(true);
@@ -172,29 +173,27 @@ class FetchWorks extends FetchAbstract implements FetchInterface
         return true;
     }
 
-
-
-
     /**
-     * Помечает запись как аудиокнигу
+     * Устанавливает флаг в нужное значение
      *
-     * @param mixed $id
-     * @param string $table
-     * @return bool|int|\PDOStatement
      * @throws Exception
      */
-    private function markWorkAsAudiobook(mixed $id, string $table = '')
+    public function setFlag($id, $field, $value)
     {
-        if (empty($table)) {
+        if (empty($id) || empty($field)) {
             return false;
+        }
+        if (empty($value)) {
+            $value = 0;
         }
 
         return (new Query(App::$PDO))
-            ->update($table, [
-                'is_audio'      =>  1,
+            ->update('works', [
+                "{$field}"      =>  $value,
             ])
             ->where("work_id", (int)$id)
             ->execute();
+
     }
 
 

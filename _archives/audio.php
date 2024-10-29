@@ -24,7 +24,7 @@ App::$PDO = new \Arris\Database\DBWrapper([
 $p = new \ATFinder\Fetch\FetchTest();
 $id = 311474;
 
-if (!file_exists(__DIR__ . "{$id}.html")) {
+if (!file_exists(__DIR__ . "audio.php")) {
     $content = $p->loadPage($id);
     $p->storeFile($id, $content);
 } else {
