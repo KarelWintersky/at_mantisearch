@@ -32,9 +32,7 @@ $parts = [
     'work_tags',
 ];
 
-CLIConsole::say("Writing CSV");
-
-$parser = new \ATFinder\IndexFetcher();
+// $parser = new \ATFinder\IndexFetcher();
 
 // $tags = $parser->loadWorkTags();
 // $parser->writeCSV("_work_tags.csv", ['id', 'hash', 'urn', 'title'], $tags);
@@ -43,6 +41,18 @@ $parser = new \ATFinder\IndexFetcher();
 // $parser->writeCSV("_authors.csv", ['id', 'author', 'lastmod', 'lastmod_ts'], $authors);
 // $parser->updateSQL('upd_authors', $authors, true);
 
-$works = $parser->loadWorks();
-$parser->updateSQLWorks($works);
+// $works = $parser->loadWorks();
+// $parser->updateSQLWorks($works);
+// File::writeCSV("_works.csv", ['id', 'lastmod', 'lastmod_ts'], $works);
+
+$parser = new \ATFinder\Fetch\FetchWorks();
+$works = $parser->loadSiteMaps(true);
+$parser->updateWorksList($works);
+
+CLIConsole::say("Writing CSV");
 File::writeCSV("_works.csv", ['id', 'lastmod', 'lastmod_ts'], $works);
+
+
+
+
+

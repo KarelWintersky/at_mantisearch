@@ -5,7 +5,7 @@ namespace ATFinder\Process;
 use AJUR\FluentPDO\Literal;
 use Arris\Entity\Result;
 use ATFinder\DiDomWrapper;
-use ATFinder\FetchAbstract;
+use ATFinder\Fetch\FetchAbstract;
 use ATFinder\Mapping;
 use Carbon\Carbon;
 use DiDom\Element;

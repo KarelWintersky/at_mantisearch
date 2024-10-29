@@ -6,11 +6,12 @@ use AJUR\FluentPDO\Exception;
 use AJUR\FluentPDO\Query;
 use Arris\CLIConsole;
 use ATFinder\App;
-use ATFinder\FetchAbstract;
-use ATFinder\FetchInterface;
 use ATFinder\File;
 use ATFinder\Process\ProcessWorks;
+use Carbon\Carbon;
 use GuzzleHttp\Exception\GuzzleException;
+use vipnytt\SitemapParser;
+use vipnytt\SitemapParser\Exceptions\SitemapParserException;
 
 class FetchWorks extends FetchAbstract implements FetchInterface
 {
@@ -196,8 +197,143 @@ class FetchWorks extends FetchAbstract implements FetchInterface
 
     }
 
+    public function loadSiteMaps($logging = false):array
+    {
+        $items = [];
+        $items_inner_counter = 1;
+        $parts_counter = 1;
+
+        try {
+            while (true) {
+                $local_tags_found = 0;
+
+                $url = sprintf($this->sitemap_urls['works'], $parts_counter);
+
+                if ($logging) CLIConsole::say("Loading <font color='yellow'>{$url}</font>...");
+
+                $parser = new SitemapParser('MyCustomUserAgent', [
+                    'strict' => true,
+                    'guzzle' => [
+                        'connect_timeout'   =>  10,
+                        'cookies'           => $this->cookieJar
+                    ],
+                ]);
+                $parser->parse($url);
+
+                if ($logging) CLIConsole::say("Parsing ...", false);
+
+                foreach ($parser->getURLs() as $record) {
+                    $id = substr($record['loc'], $this->offsets['works']);
+
+                    $lm = strtotime($record['lastmod']);
+                    $valid_lm = ($lm >= 1) && ($lm <= 2147483647);
+
+                    $items[ $id ] = [
+                        'id'        =>  $id,
+                        'lastmod'   =>  $valid_lm ? $record['lastmod'] : 0,
+                    ];
+
+                    $items_inner_counter++;
+                    $local_tags_found++;
+                }
+
+                if ($logging) CLIConsole::say(" found {$local_tags_found} WORKS. ");
+
+                $parts_counter++;
+            }
+        } catch (SitemapParserException $e) {
+            if ($e->getCode() == 0) {
+                if ($logging) CLIConsole::say("WORKS-{$parts_counter} not found, parsing WORKS finished");
+            }
+        }
+
+        if ($logging) CLIConsole::say("Total found {$items_inner_counter} unique WORKS");
+
+        ksort($items);
+
+        return $items;
+    }
+
+    /**
+     * Обновляет БД works на основе данных из сайтмэпа
+     *
+     * @param $new_works
+     * @param $logging
+     * @return int
+     */
+    public function updateWorksList($new_works, $logging = true):int
+    {
+        $inserted_rows = 0;
+        $total_rows = count($new_works);
+        $pad_length = strlen((string)$total_rows) + 2;
+        $padded_total = str_pad($total_rows, $pad_length, ' ', STR_PAD_LEFT);
+
+        // получить все имеющиеся работы
+        $present_works = $this->loadPresentWorks();
+
+        // установим need_delete для всех present id которых нет в списке works
+        if (!empty($new_works)) {
+            $sql_set_need_delete = sprintf("UPDATE works SET need_delete = 1 WHERE work_id NOT IN (%s)", implode(',', array_keys($new_works)));
+            $this->db->query($sql_set_need_delete);
+        }
+
+        if ($logging) CLIConsole::say("Inserting...");
+
+        // проверим данные для обновления
+        foreach ($new_works as $work) {
+            $work_id = $work['id'];
+
+            if (array_key_exists($work_id, $present_works)) {
+                // книга есть в БД
+                $ts_sitemap = Carbon::parse($work['lastmod']);
+                $ts_db = Carbon::parse($present_works[$work_id]['latest_fetch']);
+
+                if ($ts_sitemap > $ts_db) {
+                    // новый таймштамп книги больше имеющегося, нужно будет обновить данные
+
+                    $sth = $this->db->prepare("UPDATE works SET latest_fetch = :latest_fetch, need_update = 1 WHERE work_id = :work_id");
+                    $sth->execute([
+                        'latest_fetch'  =>  self::convertDT($work['lastmod']), //@todo: возможно, дату надо как-то обработать
+                        // date(DateTimeInterface::ATOM, $work['lastmod'])
+                        // или так:
+                        // (Carbon::parse($work['lastUpdateTime']))->toDateTimeString(),
+                        'work_id'       =>  $work_id
+                    ]);
+                }
+            } else {
+                // книги нет в БД, надо вставить первичную запись
+                $sth = $this->db->prepare("INSERT INTO works (work_id, latest_fetch, need_update) VALUES (:work_id, :latest_fetch, 1)");
+                $sth->execute([
+                    'work_id'       =>  $work_id,
+                    'latest_fetch'  =>  self::convertDT($work['lastmod'])
+                ]);
 
 
+            }
+
+            $inserted_rows++;
+            if ($logging) CLIConsole::say(
+                sprintf(
+                    "Inserted %s / %s \r",
+                    str_pad($inserted_rows, $pad_length, ' ', STR_PAD_LEFT),
+                    $padded_total
+                ),
+                false
+            );
+        }
+        return 1;
+    }
+
+    public function loadPresentWorks():array
+    {
+        $sth = $this->db->query("SELECT work_id, latest_fetch, latest_parse FROM works ORDER BY work_id");
+        $all_works = [];
+        array_map(static function($row) use (&$all_works) {
+            $all_works[ $row['work_id'] ] = $row;
+        }, $sth->fetchAll());
+
+        return $all_works;
+    }
 
 
 

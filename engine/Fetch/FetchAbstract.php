@@ -1,24 +1,52 @@
 <?php
 
-namespace ATFinder;
+namespace ATFinder\Fetch;
 
 use AJUR\FluentPDO\Exception;
 use AJUR\FluentPDO\Literal;
 use AJUR\FluentPDO\Query;
+use AllowDynamicProperties;
+use Arris\CLIConsole;
+use Arris\Database\DBWrapper;
+use ATFinder\App;
+use Carbon\Carbon;
+use DateTimeInterface;
+use GuzzleHttp\Cookie\CookieJar;
 use LitEmoji\LitEmoji;
 use Normalizer;
 use PDO;
 
+#[AllowDynamicProperties]
 class FetchAbstract
 {
     /**
-     * @var \Arris\Database\DBWrapper
+     * @var DBWrapper
      */
     public mixed $db;
+
+    public CookieJar $cookieJar;
 
     public function __construct()
     {
         $this->db = App::$PDO;
+
+        $this->sitemap_urls = [
+            'work_tags' =>  "https://author.today/sitemap/work_tags_%s.xml",
+            'authors'   =>  "https://author.today/sitemap/authors_%s.xml",
+            'posts'     =>  "https://author.today/sitemap/posts_%s.xml",
+            'works'     =>  "https://author.today/sitemap/works_%s.xml"
+        ];
+
+        $this->offsets = [
+            'work_tags' =>  strlen('https://author.today/work/tag/'),
+            'authors'   =>  strlen('https://author.today/u/'),
+            'posts'     =>  strlen('https://author.today/post/'),
+            'works'     =>  strlen('https://author.today/work/')
+        ];
+
+        $this->cookieJar = CookieJar::fromArray([
+            'backend_route' => 'web08'
+        ], ".author.today");
     }
 
     /**
@@ -102,5 +130,66 @@ class FetchAbstract
         $string = LitEmoji::removeEmoji($string);
         return $string;
     }
+
+    public static function convertDT(string $datetime):string
+    {
+        $lm = strtotime($datetime);
+        $valid_lm = ($lm >= 1) && ($lm <= 2147483647);
+
+        return $valid_lm
+            ? Carbon::parse($datetime)->toDateTimeString()
+            : Carbon::createFromTimestamp(0)->toDateTimeString();
+    }
+
+    /**
+     * @deprecated
+     *
+     * @param $target
+     * @param $data
+     * @param $with_author
+     * @return int
+     */
+    public function updateSQL($target, $data, $with_author = false):int
+    {
+        $sth_check = $this->db->prepare("
+        SELECT id FROM {$target} WHERE work_id = :work_id
+        ");
+
+        $sql = "
+REPLACE INTO {$target} (work_id, login, latest_fetch, need_update) 
+VALUES (:work_id, :login, :latest_fetch, 1)        
+        ";
+
+        $sth = $this->db->prepare($sql);
+
+        $inserted_rows = 0;
+        $total_rows = count($data);
+        $pad_length = strlen((string)$total_rows) + 2;
+        $padded_total = str_pad($total_rows, $pad_length, ' ', STR_PAD_LEFT);
+        foreach ($data as $row) {
+            $dataset = [
+                'work_id'       =>  $row['id'],
+                'latest_fetch'  =>  ($row['lastmod'] == 0 ? date(DateTimeInterface::ATOM) : $row['lastmod']),
+                'login'         =>  $with_author ? $row['author'] : ''
+            ];
+
+            $sth->execute($dataset);
+            $inserted_rows++;
+
+            CLIConsole::say(
+                sprintf(
+                    "Inserted %s / %s \r",
+                    str_pad($inserted_rows, $pad_length, ' ', STR_PAD_LEFT),
+                    $padded_total
+                ),
+                false
+            );
+        }
+        CLIConsole::say();
+
+        return $inserted_rows;
+    }
+
+
 
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace ATFinder;
+namespace ATFinder\Fetch;
 
 interface FetchInterface
 {
