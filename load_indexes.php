@@ -1,7 +1,7 @@
 <?php
 
 define('ENGINE_START_TIME', microtime(true));
-define('PATH_ENV', __DIR__);
+const PATH_ENV = "/etc/arris/at_mantisearch/";
 date_default_timezone_set('Europe/Moscow');
 
 use Arris\CLIConsole;
@@ -11,7 +11,7 @@ use Dotenv\Dotenv;
 
 require __DIR__ . '/vendor/autoload.php';
 
-Dotenv::createUnsafeImmutable(PATH_ENV, ['.config.conf'])->load();
+Dotenv::createUnsafeImmutable(PATH_ENV, ['common.conf'])->load();
 
 App::factory();
 
@@ -22,6 +22,8 @@ App::$PDO = new \Arris\Database\DBWrapper([
     'database'          =>  getenv('DB.DATABASE'),
     'username'          =>  getenv('DB.USER'),
     'password'          =>  getenv('DB.PASSWORD'),
+    'charset'           =>  getenv('DB.CHARSET'),
+    'charset_collate'   =>  getenv('DB.COLLATE'),
     'slow_query_threshold'  => 1
 ]);
 

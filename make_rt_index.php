@@ -2,7 +2,7 @@
 // создаем первичный индекс для тестирования
 
 define('ENGINE_START_TIME', microtime(true));
-define('PATH_ENV', __DIR__);
+const PATH_ENV = "/etc/arris/at_mantisearch/";
 date_default_timezone_set('Europe/Moscow');
 
 use \Arris\Toolkit\SphinxQL\PDOWrapper;
@@ -10,13 +10,15 @@ use Dotenv\Dotenv;
 
 require_once __DIR__ . '/vendor/autoload.php';
 
-Dotenv::createUnsafeImmutable(PATH_ENV, ['.config.conf'])->load();
+Dotenv::createUnsafeImmutable(PATH_ENV, ['common.conf'])->load();
 
 $mysql_connection = new \Arris\Database\DBWrapper([
     'driver'    =>  'mysql',
     'username'  =>  getenv('DB.USER'),
     'password'  =>  getenv('DB.PASSWORD'),
     'database'  =>  getenv('DB.DATABASE'),
+    'charset'           =>  getenv('DB.CHARSET'),
+    'charset_collate'   =>  getenv('DB.COLLATE'),
     'slow_query_threshold'  => 1
 ]);
 
